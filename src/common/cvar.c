@@ -174,8 +174,8 @@ cvar_t * Cvar_Get(const char * var_name, const char * var_value, int flags)
     }
 
     var           = Z_Malloc(sizeof(*var));
-    var->name     = CopyString(var_name);
-    var->string   = CopyString(var_value);
+    var->name     = Q_CopyString(var_name);
+    var->string   = Q_CopyString(var_value);
     var->modified = true;
     var->value    = atof(var->string);
 
@@ -240,11 +240,11 @@ cvar_t * Cvar_Set2(const char * var_name, const char * value, qboolean force)
             if (Com_ServerState())
             {
                 Com_Printf("%s will be changed for next game.\n", var_name);
-                var->latched_string = CopyString(value);
+                var->latched_string = Q_CopyString(value);
             }
             else
             {
-                var->string = CopyString(value);
+                var->string = Q_CopyString(value);
                 var->value = atof(var->string);
                 if (!strcmp(var->name, "game"))
                 {
@@ -278,7 +278,7 @@ cvar_t * Cvar_Set2(const char * var_name, const char * value, qboolean force)
 
     Z_Free(var->string); // free the old value string
 
-    var->string = CopyString(value);
+    var->string = Q_CopyString(value);
     var->value  = atof(var->string);
 
     return var;
@@ -329,7 +329,7 @@ cvar_t * Cvar_FullSet(const char * var_name, const char * value, int flags)
 
     Z_Free(var->string); // free the old value string
 
-    var->string = CopyString(value);
+    var->string = Q_CopyString(value);
     var->value  = atof(var->string);
     var->flags  = flags;
 

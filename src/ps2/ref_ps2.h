@@ -76,6 +76,7 @@ typedef struct
 {
     qboolean         initialized;              // Flag to keep track of initialization of our global ps2ref.
     qboolean         show_fps_count;           // Draws a frames per sec counter in the top-right corner of the screen.
+    qboolean         show_mem_tags;            // Draws a debug overlay with the current values of the memory tags.
     qboolean         frame_started;            // Set by BeginFrame, cleared at EndFrame. Some calls must be in between.
     zbuffer_t        z_buffer;                 // PS2 depth buffer information.
     framebuffer_t    frame_buffers[2];         // PS2 color framebuffers (double buffered).
@@ -203,9 +204,6 @@ void PS2_TexImageSetup(ps2_teximage_t * teximage, const char * name, int w, int 
                        int func, int psm, int mag_filter, int min_filter, ps2_imagetype_t type, byte * pic);
 void PS2_TexImageFree(ps2_teximage_t * teximage);
 
-// Scrap texture atlas:
-ps2_teximage_t * Scrap_AllocBlock(const byte * pic8in, int w, int h, const char * pic_name);
-
 /*
  * Image loading for textures/sprites:
  */
@@ -214,6 +212,8 @@ qboolean PCX_LoadFromMemory(const char * filename, const byte * data, int data_l
                             byte ** pic, u32 * palette, int * width, int * height);
 qboolean PCX_LoadFromFile(const char * filename, byte ** pic,
                           u32 * palette, int * width, int * height);
+qboolean TGA_LoadFromFile(const char * filename, byte ** pic,
+                          int * width, int * height);
 
 /*
  * Convert from 8bit palettized to RGB[A]:
@@ -225,5 +225,17 @@ void Img_UnPalettize24(int width, int height, const byte * restrict pic8in, // P
                        const u32 * restrict palette, byte * restrict pic24out);
 void Img_UnPalettize16(int width, int height, const byte * restrict pic8in, // Palettized 8bits to RGBA 16bits (1-5-5-5).
                        const u32 * restrict palette, byte * restrict pic16out);
+
+/*
+ * Other image utilities:
+ */
+
+// Scrap texture atlas allocation. This is based on the same atlas used by ref_gl.
+// Returns null if the atlas is full, a unique ps2_teximage_t handle referencing the atlas otherwise.
+ps2_teximage_t * Scrap_AllocBlock(const byte * pic8in, int w, int h, const char * pic_name);
+
+// Resize the input RGBA image using a box filter. Output and input must point to different buffers.
+void Img_Resample32(const u32 * restrict in_img, int in_width, int in_height,
+                    u32 * restrict out_img, int out_width, int out_height);
 
 #endif // PS2_REFRESH_H

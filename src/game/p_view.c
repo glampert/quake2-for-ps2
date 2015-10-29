@@ -368,7 +368,7 @@ void SV_CalcGunOffset(edict_t * ent)
 
     // gun height
     VectorClear(ent->client->ps.gunoffset);
-    //	ent->ps->gunorigin[2] += bob;
+    //  ent->ps->gunorigin[2] += bob;
 
     // gun_x / gun_y / gun_z are development tools
     for (i = 0; i < 3; i++)

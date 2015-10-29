@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -182,9 +182,8 @@ typedef enum
     MOVETYPE_NOCLIP, // origin and angles change with no interaction
     MOVETYPE_PUSH,   // no clip to world, push on box contact
     MOVETYPE_STOP,   // no clip to world, stops on box contact
-
-    MOVETYPE_WALK, // gravity
-    MOVETYPE_STEP, // gravity, special edge handling
+    MOVETYPE_WALK,   // gravity
+    MOVETYPE_STEP,   // gravity, special edge handling
     MOVETYPE_FLY,
     MOVETYPE_TOSS,       // gravity
     MOVETYPE_FLYMISSILE, // extra size to monsters
@@ -482,10 +481,9 @@ extern int body_armor_index;
 #define MOD_FRIENDLY_FIRE 0x8000000
 
 extern int meansOfDeath;
-
 extern edict_t * g_edicts;
 
-#define FOFS(x) (int) & (((edict_t *)0)->x)
+#define FOFS(x)  (int) & (((edict_t *)0)->x)
 #define STOFS(x) (int) & (((spawn_temp_t *)0)->x)
 #define LLOFS(x) (int) & (((level_locals_t *)0)->x)
 #define CLOFS(x) (int) & (((gclient_t *)0)->x)
@@ -504,30 +502,23 @@ extern cvar_t * password;
 extern cvar_t * spectator_password;
 extern cvar_t * g_select_empty;
 extern cvar_t * dedicated;
-
 extern cvar_t * filterban;
-
 extern cvar_t * sv_gravity;
 extern cvar_t * sv_maxvelocity;
-
 extern cvar_t *gun_x, *gun_y, *gun_z;
 extern cvar_t * sv_rollspeed;
 extern cvar_t * sv_rollangle;
-
 extern cvar_t * run_pitch;
 extern cvar_t * run_roll;
 extern cvar_t * bob_up;
 extern cvar_t * bob_pitch;
 extern cvar_t * bob_roll;
-
 extern cvar_t * sv_cheats;
 extern cvar_t * maxclients;
 extern cvar_t * maxspectators;
-
 extern cvar_t * flood_msgs;
 extern cvar_t * flood_persecond;
 extern cvar_t * flood_waitdelay;
-
 extern cvar_t * sv_maplist;
 
 #define world (&g_edicts[0])

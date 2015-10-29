@@ -252,15 +252,16 @@ void Key_Console(int key)
     {
         char * cbd;
 
-        if ((cbd = Sys_GetClipboardData()) != 0)
+        if ((cbd = Sys_GetClipboardData()) != NULL)
         {
             int i;
-
             strtok(cbd, "\n\r\b");
 
             i = strlen(cbd);
             if (i + key_linepos >= MAXCMDLINE)
+            {
                 i = MAXCMDLINE - key_linepos;
+            }
 
             if (i > 0)
             {
@@ -268,7 +269,8 @@ void Key_Console(int key)
                 strcat(key_lines[edit_line], cbd);
                 key_linepos += i;
             }
-            free(cbd);
+
+            Z_Free(cbd);
         }
 
         return;

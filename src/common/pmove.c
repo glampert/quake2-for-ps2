@@ -45,8 +45,10 @@ typedef struct
     qboolean ladder;
 } pml_t;
 
-pmove_t * pm;
-pml_t pml;
+// LAMPERT 2015-10-27
+// Marked these locals as 'static'
+static pmove_t * pm;
+static pml_t pml;
 
 // movement parameters
 float pm_stopspeed       = 100;

@@ -74,18 +74,17 @@ then a packet only needs to be delivered if there is something in the
 unacknowledged reliable
 */
 
-cvar_t * showpackets;
-cvar_t * showdrop;
-cvar_t * qport;
+static cvar_t * showpackets;
+static cvar_t * showdrop;
+static cvar_t * qport;
 
-netadr_t net_from;
-sizebuf_t net_message;
-byte net_message_buffer[MAX_MSGLEN];
+netadr_t  net_from    = {0};
+sizebuf_t net_message = {0};
+byte net_message_buffer[MAX_MSGLEN] = {0};
 
 /*
 ===============
 Netchan_Init
-
 ===============
 */
 void Netchan_Init(void)

@@ -21,18 +21,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <ctype.h>
 
 #ifdef _WIN32
-#include <io.h>
-#endif
+#include <io.h> // For filelength()
+#endif // _WIN32
 
 #include "client.h"
-#include "../client/qmenu.h"
-
-#define NUM_CURSOR_FRAMES 15
-static int m_main_cursor;
-
-static char * menu_in_sound = "misc/menu1.wav";
-static char * menu_move_sound = "misc/menu2.wav";
-static char * menu_out_sound = "misc/menu3.wav";
+#include "client/qmenu.h"
 
 void M_Menu_Main_f(void);
 void M_Menu_Game_f(void);
@@ -52,16 +45,21 @@ void M_Menu_Keys_f(void);
 void M_Menu_Quit_f(void);
 void M_Menu_Credits(void);
 
-qboolean m_entersound; // play after drawing a frame, so caching
-                       // won't disrupt the sound
-
-void (*m_drawfunc)(void);
-const char * (*m_keyfunc)(int key);
-
 //=============================================================================
-/* Support Routines */
+/* Locals */
 
-#define MAX_MENU_DEPTH 8
+enum
+{
+    MAX_MENU_DEPTH    = 20,
+    NUM_CURSOR_FRAMES = 15
+};
+
+static const char * menu_in_sound   = "misc/menu1.wav";
+static const char * menu_move_sound = "misc/menu2.wav";
+static const char * menu_out_sound  = "misc/menu3.wav";
+
+static void (*m_drawfunc)(void);
+static const char * (*m_keyfunc)(int key);
 
 typedef struct
 {
@@ -69,8 +67,15 @@ typedef struct
     const char * (*key)(int k);
 } menulayer_t;
 
-menulayer_t m_layers[MAX_MENU_DEPTH];
-int m_menudepth;
+static menulayer_t m_layers[MAX_MENU_DEPTH];
+static int m_menudepth;
+static int m_main_cursor;
+
+// play after drawing a frame, so caching won't disrupt the sound.
+static qboolean m_entersound;
+
+//=============================================================================
+/* Support Routines */
 
 static void M_Banner(char * name)
 {
@@ -104,7 +109,7 @@ void M_PushMenu(void (*draw)(void), const char * (*key)(int k))
     {
         if (m_menudepth >= MAX_MENU_DEPTH)
         {
-            Com_Error(ERR_FATAL, "M_PushMenu: MAX_MENU_DEPTH");
+            Com_Error(ERR_FATAL, "M_PushMenu: MAX_MENU_DEPTH exceeded!");
         }
         m_layers[m_menudepth].draw = m_drawfunc;
         m_layers[m_menudepth].key = m_keyfunc;
@@ -134,6 +139,7 @@ void M_PopMenu(void)
     S_StartLocalSound(menu_out_sound);
     if (m_menudepth < 1)
         Com_Error(ERR_FATAL, "M_PopMenu: depth < 1");
+
     m_menudepth--;
 
     m_drawfunc = m_layers[m_menudepth].draw;
@@ -380,7 +386,11 @@ MAIN MENU
 
 =======================================================================
 */
-#define MAIN_ITEMS 5
+
+enum
+{
+    MAIN_ITEMS = 5
+};
 
 void M_Main_Draw(void)
 {
@@ -495,6 +505,7 @@ MULTIPLAYER MENU
 
 =======================================================================
 */
+
 static menuframework_s s_multiplayer_menu;
 static menuaction_s s_join_network_server_action;
 static menuaction_s s_start_network_server_action;
@@ -576,6 +587,7 @@ KEYS MENU
 
 =======================================================================
 */
+
 char * bindnames[][2] =
 {
   { "+attack", "attack" },
@@ -1006,8 +1018,9 @@ CONTROLS MENU
 
 =======================================================================
 */
-static cvar_t * win_noalttab;
+
 extern cvar_t * in_joystick;
+static cvar_t * win_noalttab;
 
 static menuframework_s s_options_menu;
 static menuaction_s s_options_defaults_action;
@@ -1163,6 +1176,16 @@ static void ConsoleFunc(void * unused)
 
 static void UpdateSoundQualityFunc(void * unused)
 {
+    //
+    // LAMPERT 2015-10-29
+    //
+    // FIXME:
+    // Can't for the life of me figure out what's wrong here!
+    // Somehow this still gets called outside Begin/End frame,
+    // breaking on the PS2. Commenting it out for now.
+    //
+
+    /*
     if (s_options_quality_list.curvalue)
     {
         Cvar_SetValue("s_khz", 22);
@@ -1182,9 +1205,13 @@ static void UpdateSoundQualityFunc(void * unused)
     M_Print(16 + 16, 120 - 48 + 24, "please be patient.");
 
     // the text box won't show up unless we do a buffer swap
-    re.EndFrame();
+    //
+    // LAMPERT 2015-10-29:
+    // FIXME This won't work in the PS2, we need consistent Begin/End frame states!
+    //re.EndFrame();
 
     CL_Snd_Restart_f();
+    */
 }
 
 void Options_MenuInit(void)
@@ -1313,6 +1340,7 @@ void Options_MenuInit(void)
     s_options_crosshair_box.generic.name = "crosshair";
     s_options_crosshair_box.generic.callback = CrosshairFunc;
     s_options_crosshair_box.itemnames = crosshair_names;
+
     /*
     s_options_noalttab_box.generic.type = MTYPE_SPINCONTROL;
     s_options_noalttab_box.generic.x    = 0;
@@ -1320,7 +1348,8 @@ void Options_MenuInit(void)
     s_options_noalttab_box.generic.name = "disable alt-tab";
     s_options_noalttab_box.generic.callback = NoAltTabFunc;
     s_options_noalttab_box.itemnames = yesno_names;
-*/
+    */
+
     s_options_joystick_box.generic.type = MTYPE_SPINCONTROL;
     s_options_joystick_box.generic.x = 0;
     s_options_joystick_box.generic.y = 120;
@@ -1404,10 +1433,12 @@ END GAME MENU
 
 =============================================================================
 */
+
 static int credits_start_time;
 static const char ** credits;
 static char * creditsIndex[256];
 static char * creditsBuffer;
+
 static const char * idcredits[] =
 {
   "+QUAKE II BY ID SOFTWARE",
@@ -2035,10 +2066,12 @@ LOADGAME MENU
 =============================================================================
 */
 
-#define MAX_SAVEGAMES 15
+enum
+{
+    MAX_SAVEGAMES = 15
+};
 
 static menuframework_s s_savegame_menu;
-
 static menuframework_s s_loadgame_menu;
 static menuaction_s s_loadgame_actions[MAX_SAVEGAMES];
 
@@ -2137,6 +2170,7 @@ SAVEGAME MENU
 
 =============================================================================
 */
+
 static menuframework_s s_savegame_menu;
 static menuaction_s s_savegame_actions[MAX_SAVEGAMES];
 
@@ -2210,7 +2244,11 @@ JOIN SERVER MENU
 
 =============================================================================
 */
-#define MAX_LOCAL_SERVERS 8
+
+enum
+{
+    MAX_LOCAL_SERVERS = 8
+};
 
 static menuframework_s s_joinserver_menu;
 static menuseparator_s s_joinserver_server_title;
@@ -2275,6 +2313,16 @@ void NullCursorDraw(void * self)
 
 void SearchLocalGames(void)
 {
+    //
+    // LAMPERT 2015-10-29
+    //
+    // FIXME:
+    // Can't for the life of me figure out what's wrong here!
+    // Somehow this still gets called outside Begin/End frame,
+    // breaking on the PS2. Commenting it out for now.
+    //
+
+    /*
     int i;
 
     m_num_servers = 0;
@@ -2287,10 +2335,14 @@ void SearchLocalGames(void)
     M_Print(16 + 16, 120 - 48 + 24, "please be patient.");
 
     // the text box won't show up unless we do a buffer swap
-    re.EndFrame();
+    //
+    // LAMPERT 2015-10-29:
+    // FIXME This won't work in the PS2, we need consistent Begin/End frame states!
+    //re.EndFrame();
 
     // send out info packets
     CL_PingServers_f();
+    */
 }
 
 void SearchLocalGamesFunc(void * self)
@@ -2373,6 +2425,7 @@ START SERVER MENU
 
 =============================================================================
 */
+
 static menuframework_s s_startserver_menu;
 static char ** mapnames;
 static int nummaps;
@@ -2390,6 +2443,7 @@ void DMOptionsFunc(void * self)
 {
     if (s_rules_box.curvalue == 1)
         return;
+
     M_Menu_DMOptions_f();
 }
 
@@ -2424,7 +2478,7 @@ void RulesChangeFunc(void * self)
             s_maxclients_field.generic.statusbar = NULL;
             s_startserver_dmoptions_action.generic.statusbar = NULL;
         }
-*/
+        */
     }
     //PGM
     //=====
@@ -2509,6 +2563,7 @@ void StartServer_MenuInit(void)
       "cooperative",
       0
     };
+
     //=======
     //PGM
     static const char * dm_coop_names_rogue[] =
@@ -2521,6 +2576,7 @@ void StartServer_MenuInit(void)
     };
     //PGM
     //=======
+
     char * buffer;
     char mapsname[1024];
     char * s;
@@ -2535,18 +2591,21 @@ void StartServer_MenuInit(void)
     if ((fp = fopen(mapsname, "rb")) == 0)
     {
         if ((length = FS_LoadFile("maps.lst", (void **)&buffer)) == -1)
-            Com_Error(ERR_DROP, "couldn't find maps.lst\n");
+        {
+            Com_Error(ERR_DROP, "Couldn't find maps.lst\n");
+        }
     }
     else
     {
-#ifdef _WIN32
+        #ifdef _WIN32
         length = filelength(fileno(fp));
-#else
+        #else
         fseek(fp, 0, SEEK_END);
         length = ftell(fp);
         fseek(fp, 0, SEEK_SET);
-#endif
-        buffer = malloc(length);
+        #endif
+
+        buffer = Z_Malloc(length);
         fread(buffer, length, 1, fp);
     }
 
@@ -2561,9 +2620,11 @@ void StartServer_MenuInit(void)
     }
 
     if (nummaps == 0)
+    {
         Com_Error(ERR_DROP, "no maps in maps.lst\n");
+    }
 
-    mapnames = malloc(sizeof(char *) * (nummaps + 1));
+    mapnames = Z_Malloc(sizeof(char *) * (nummaps + 1));
     memset(mapnames, 0, sizeof(char *) * (nummaps + 1));
 
     s = buffer;
@@ -2582,7 +2643,7 @@ void StartServer_MenuInit(void)
         strcpy(longname, COM_Parse(&s));
         Com_sprintf(scratch, sizeof(scratch), "%s\n%s", longname, shortname);
 
-        mapnames[i] = malloc(strlen(scratch) + 1);
+        mapnames[i] = Z_Malloc(strlen(scratch) + 1);
         strcpy(mapnames[i], scratch);
     }
     mapnames[nummaps] = 0;
@@ -2590,7 +2651,7 @@ void StartServer_MenuInit(void)
     if (fp != 0)
     {
         fp = 0;
-        free(buffer);
+        Z_Free(buffer);
     }
     else
     {
@@ -2669,6 +2730,7 @@ void StartServer_MenuInit(void)
     s_maxclients_field.generic.statusbar = NULL;
     s_maxclients_field.length = 3;
     s_maxclients_field.visible_length = 3;
+
     if (Cvar_VariableValue("maxclients") == 1)
         strcpy(s_maxclients_field.buffer, "8");
     else
@@ -2728,8 +2790,11 @@ const char * StartServer_MenuKey(int key)
             int i;
 
             for (i = 0; i < nummaps; i++)
-                free(mapnames[i]);
-            free(mapnames);
+            {
+                Z_Free(mapnames[i]);
+            }
+
+            Z_Free(mapnames);
         }
         mapnames = 0;
         nummaps = 0;
@@ -2751,8 +2816,8 @@ DMOPTIONS BOOK MENU
 
 =============================================================================
 */
-static char dmoptions_statusbar[128];
 
+static char dmoptions_statusbar[128];
 static menuframework_s s_dmoptions_menu;
 
 static menulist_s s_friendlyfire_box;
@@ -3152,6 +3217,7 @@ DOWNLOADOPTIONS BOOK MENU
 
 =============================================================================
 */
+
 static menuframework_s s_downloadoptions_menu;
 
 static menuseparator_s s_download_title;
@@ -3283,7 +3349,11 @@ ADDRESS BOOK MENU
 
 =============================================================================
 */
-#define NUM_ADDRESSBOOK_ENTRIES 9
+
+enum
+{
+    NUM_ADDRESSBOOK_ENTRIES = 9
+};
 
 static menuframework_s s_addressbook_menu;
 static menufield_s s_addressbook_fields[NUM_ADDRESSBOOK_ENTRIES];
@@ -3356,6 +3426,7 @@ PLAYER CONFIG MENU
 
 =============================================================================
 */
+
 static menuframework_s s_player_config_menu;
 static menufield_s s_player_name_field;
 static menulist_s s_player_model_box;
@@ -3368,8 +3439,11 @@ static menuseparator_s s_player_hand_title;
 static menuseparator_s s_player_rate_title;
 static menuaction_s s_player_download_action;
 
-#define MAX_DISPLAYNAME 16
-#define MAX_PLAYERMODELS 1024
+enum
+{
+    MAX_DISPLAYNAME  = 16,
+    MAX_PLAYERMODELS = 1024
+};
 
 typedef struct
 {
@@ -3417,11 +3491,11 @@ static void FreeFileList(char ** list, int n)
     {
         if (list[i])
         {
-            free(list[i]);
+            Z_Free(list[i]);
             list[i] = 0;
         }
     }
-    free(list);
+    Z_Free(list);
 }
 
 static qboolean IconOfSkinExists(char * skin, char ** pcxfiles, int npcxfiles)
@@ -3494,7 +3568,7 @@ static qboolean PlayerConfig_ScanDirectories(void)
         strcat(scratch, "/tris.md2");
         if (!Sys_FindFirst(scratch, 0, SFF_SUBDIR | SFF_HIDDEN | SFF_SYSTEM))
         {
-            free(dirnames[i]);
+            Z_Free(dirnames[i]);
             dirnames[i] = 0;
             Sys_FindClose();
             continue;
@@ -3508,7 +3582,7 @@ static qboolean PlayerConfig_ScanDirectories(void)
 
         if (!pcxnames)
         {
-            free(dirnames[i]);
+            Z_Free(dirnames[i]);
             dirnames[i] = 0;
             continue;
         }
@@ -3527,7 +3601,7 @@ static qboolean PlayerConfig_ScanDirectories(void)
         if (!nskins)
             continue;
 
-        skinnames = malloc(sizeof(char *) * (nskins + 1));
+        skinnames = Z_Malloc(sizeof(char *) * (nskins + 1));
         memset(skinnames, 0, sizeof(char *) * (nskins + 1));
 
         // copy the valid skins
@@ -3552,7 +3626,7 @@ static qboolean PlayerConfig_ScanDirectories(void)
                     if (strrchr(scratch, '.'))
                         *strrchr(scratch, '.') = 0;
 
-                    skinnames[s] = strdup(scratch);
+                    skinnames[s] = Q_CopyString(scratch);
                     s++;
                 }
             }
@@ -3849,10 +3923,14 @@ const char * PlayerConfig_MenuKey(int key)
             for (j = 0; j < s_pmi[i].nskins; j++)
             {
                 if (s_pmi[i].skindisplaynames[j])
-                    free(s_pmi[i].skindisplaynames[j]);
+                {
+                    Z_Free(s_pmi[i].skindisplaynames[j]);
+                }
+
                 s_pmi[i].skindisplaynames[j] = 0;
             }
-            free(s_pmi[i].skindisplaynames);
+
+            Z_Free(s_pmi[i].skindisplaynames);
             s_pmi[i].skindisplaynames = 0;
             s_pmi[i].nskins = 0;
         }
@@ -3878,15 +3956,16 @@ GALLERY MENU
 
 =======================================================================
 */
-#if 0
-void M_Menu_Gallery_f( void )
-{
-    extern void Gallery_MenuDraw( void );
-    extern const char *Gallery_MenuKey( int key );
 
-    M_PushMenu( Gallery_MenuDraw, Gallery_MenuKey );
+#if 0
+void M_Menu_Gallery_f(void)
+{
+    extern void Gallery_MenuDraw(void);
+    extern const char * Gallery_MenuKey(int key);
+
+    M_PushMenu(Gallery_MenuDraw, Gallery_MenuKey);
 }
-#endif
+#endif // 0
 
 /*
 =======================================================================
@@ -4005,12 +4084,11 @@ M_Keydown
 void M_Keydown(int key)
 {
     const char * s;
-
     if (m_keyfunc)
     {
         if ((s = m_keyfunc(key)) != 0)
         {
-            S_StartLocalSound((char *)s);
+            S_StartLocalSound(s);
         }
     }
 }

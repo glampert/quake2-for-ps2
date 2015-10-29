@@ -45,30 +45,23 @@ cvar_t * maxspectators;
 cvar_t * maxentities;
 cvar_t * g_select_empty;
 cvar_t * dedicated;
-
 cvar_t * filterban;
-
 cvar_t * sv_maxvelocity;
 cvar_t * sv_gravity;
-
 cvar_t * sv_rollspeed;
 cvar_t * sv_rollangle;
 cvar_t * gun_x;
 cvar_t * gun_y;
 cvar_t * gun_z;
-
 cvar_t * run_pitch;
 cvar_t * run_roll;
 cvar_t * bob_up;
 cvar_t * bob_pitch;
 cvar_t * bob_roll;
-
 cvar_t * sv_cheats;
-
 cvar_t * flood_msgs;
 cvar_t * flood_persecond;
 cvar_t * flood_waitdelay;
-
 cvar_t * sv_maplist;
 
 void SpawnEntities(char * mapname, char * entities, char * spawnpoint);
@@ -132,9 +125,10 @@ game_export_t * GetGameAPI(game_import_t * import)
     return &globals;
 }
 
-#ifndef GAME_HARD_LINKED
 // this is only here so the functions in q_shared.c and q_shwin.c can link
-void Sys_Error(char * error, ...)
+#ifndef GAME_HARD_LINKED
+
+void Sys_Error(const char * error, ...)
 {
     va_list argptr;
     char text[1024];
@@ -146,7 +140,7 @@ void Sys_Error(char * error, ...)
     gi.error(ERR_FATAL, "%s", text);
 }
 
-void Com_Printf(char * msg, ...)
+void Com_Printf(const char * msg, ...)
 {
     va_list argptr;
     char text[1024];
@@ -158,7 +152,7 @@ void Com_Printf(char * msg, ...)
     gi.dprintf("%s", text);
 }
 
-#endif
+#endif // GAME_HARD_LINKED
 
 //======================================================================
 
@@ -224,7 +218,7 @@ void EndDMLevel(void)
     // see if it's in the map list
     if (*sv_maplist->string)
     {
-        s = strdup(sv_maplist->string);
+        s = G_CopyString(sv_maplist->string);
         f = NULL;
         t = strtok(s, seps);
         while (t != NULL)
@@ -241,19 +235,26 @@ void EndDMLevel(void)
                         BeginIntermission(CreateTargetChangeLevel(f));
                 }
                 else
+                {
                     BeginIntermission(CreateTargetChangeLevel(t));
-                free(s);
+                }
+
+                gi.TagFree(s);
                 return;
             }
             if (!f)
+            {
                 f = t;
+            }
             t = strtok(NULL, seps);
         }
-        free(s);
+        gi.TagFree(s);
     }
 
     if (level.nextmap[0]) // go to a specific map
+    {
         BeginIntermission(CreateTargetChangeLevel(level.nextmap));
+    }
     else
     { // search for a changelevel
         ent = G_Find(NULL, FOFS(classname), "target_changelevel");

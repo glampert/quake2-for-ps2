@@ -314,20 +314,18 @@ COLLISION DETECTION
 */
 
 // lower bits are stronger, and will eat weaker brushes completely
-#define CONTENTS_SOLID 1  // an eye is never valid in a solid
+#define CONTENTS_SOLID  1 // an eye is never valid in a solid
 #define CONTENTS_WINDOW 2 // translucent, but not watery
-#define CONTENTS_AUX 4
-#define CONTENTS_LAVA 8
-#define CONTENTS_SLIME 16
-#define CONTENTS_WATER 32
-#define CONTENTS_MIST 64
+#define CONTENTS_AUX    4
+#define CONTENTS_LAVA   8
+#define CONTENTS_SLIME  16
+#define CONTENTS_WATER  32
+#define CONTENTS_MIST   64
 #define LAST_VISIBLE_CONTENTS 64
 
 // remaining contents are non-visible, and don't eat brushes
-
-#define CONTENTS_AREAPORTAL 0x8000
-
-#define CONTENTS_PLAYERCLIP 0x10000
+#define CONTENTS_AREAPORTAL  0x8000
+#define CONTENTS_PLAYERCLIP  0x10000
 #define CONTENTS_MONSTERCLIP 0x20000
 
 // currents can be added to any other contents, and may be mixed
@@ -847,7 +845,6 @@ typedef struct
 #define MZ2_WIDOW2_BEAM_SWEEP_9 208
 #define MZ2_WIDOW2_BEAM_SWEEP_10 209
 #define MZ2_WIDOW2_BEAM_SWEEP_11 210
-
 // ROGUE
 
 extern vec3_t monster_flash_offset[];

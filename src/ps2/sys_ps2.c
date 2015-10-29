@@ -24,6 +24,13 @@
 // ref_ps2.c
 extern void PS2_RendererShutdown(void);
 
+// The program code and static data will use a fair slice of
+// the main memory at all times. This is a rough estimate of that.
+enum
+{
+    PROG_MEGABYTES = 2
+};
+
 //=============================================================================
 //
 // System init/shutdown and misc helpers:
@@ -77,6 +84,10 @@ void Sys_Init(void)
 
     // Load the built-in IOP modules we need for the game.
     Sys_LoadIOPModules();
+
+    // Add our estimate of the amount of memory used to allocate
+    // the program executable and all the prog data:
+    ps2_mem_tag_counts[MEMTAG_MISC] += (PROG_MEGABYTES * 1024 * 1024);
 }
 
 /*
@@ -355,7 +366,7 @@ qboolean Sys_LoadBinaryFile(const char * filename, int * size_bytes, void ** dat
     fioLseek(fd, 0, SEEK_SET); // rewind
 
     // Alloc or fail with a Sys_Error.
-    file_data = PS2_MemAlloc(file_len, MEMTAG_FILESYS);
+    file_data = PS2_MemAlloc(file_len, MEMTAG_MISC);
 
     num_read = fioRead(fd, file_data, file_len);
     if (num_read != file_len)
@@ -375,7 +386,7 @@ BAIL:
     {
         if (file_data != NULL)
         {
-            PS2_MemFree(file_data, MEMTAG_FILESYS);
+            PS2_MemFree(file_data, file_len, MEMTAG_MISC);
             file_data = NULL;
         }
         file_len = 0;

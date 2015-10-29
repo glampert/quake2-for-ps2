@@ -178,8 +178,8 @@ extern client_state_t cl;
 /*
 ==================================================================
 
-the client_static_t structure is persistant through an arbitrary number
-of server connections
+The client_static_t structure is persistent through
+an arbitrary number of server connections.
 
 ==================================================================
 */
@@ -213,6 +213,9 @@ typedef enum
 typedef struct
 {
     connstate_t state;
+
+    // This flag determines what's rendered to the screen,
+    // e.g.: console, main menu, game view...
     keydest_t key_dest;
 
     int framecount;

@@ -561,6 +561,7 @@ void SCR_BeginLoadingPlaque(void)
     S_StopAllSounds();
     cl.sound_prepped = false; // don't play ambients
     CDAudio_Stop();
+
     if (cls.disable_screen)
         return;
     if (developer->value)
@@ -569,10 +570,12 @@ void SCR_BeginLoadingPlaque(void)
         return; // if at console, don't bring up the plaque
     if (cls.key_dest == key_console)
         return;
+
     if (cl.cinematictime > 0)
-        scr_draw_loading = 2; // clear to balack first
+        scr_draw_loading = 2; // clear to black first
     else
         scr_draw_loading = 1;
+
     SCR_UpdateScreen();
     cls.disable_screen = Sys_Milliseconds();
     cls.disable_servercount = cl.servercount;
@@ -633,7 +636,8 @@ void SCR_TimeRefresh_f(void)
     start = Sys_Milliseconds();
 
     if (Cmd_Argc() == 2)
-    { // run without page flipping
+    {
+        // run without page flipping
         re.BeginFrame(0);
         for (i = 0; i < 128; i++)
         {
@@ -647,7 +651,6 @@ void SCR_TimeRefresh_f(void)
         for (i = 0; i < 128; i++)
         {
             cl.refdef.viewangles[1] = i / 128.0 * 360.0;
-
             re.BeginFrame(0);
             re.RenderFrame(&cl.refdef);
             re.EndFrame();
@@ -1319,7 +1322,7 @@ void SCR_UpdateScreen(void)
 
         if (scr_draw_loading == 2)
         {
-            //  loading plaque over black screen
+            // loading plaque over black screen
             int w, h;
             re.CinematicSetPalette(NULL);
             scr_draw_loading = false;

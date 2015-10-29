@@ -332,6 +332,7 @@ void CL_PrepRefresh(void)
     {
         if (!cl.configstrings[CS_PLAYERSKINS + i][0])
             continue;
+
         Com_Printf("client %i\r", i);
         SCR_UpdateScreen();
         Sys_SendKeyEvents(); // pump message loop
@@ -347,6 +348,7 @@ void CL_PrepRefresh(void)
     rotate = atof(cl.configstrings[CS_SKYROTATE]);
     sscanf(cl.configstrings[CS_SKYAXIS], "%f %f %f",
            &axis[0], &axis[1], &axis[2]);
+
     re.SetSky(cl.configstrings[CS_SKY], rotate, axis);
     Com_Printf("                                     \r");
 
@@ -447,7 +449,6 @@ void SCR_DrawCrosshair(void)
 /*
 ==================
 V_RenderView
-
 ==================
 */
 void V_RenderView(float stereo_separation)

@@ -182,17 +182,265 @@ ps2_teximage_t * PS2_TexImageAlloc(void)
     }
 
     //TODO assume always sequential, or allow empty gaps???
+    // -- should also look into the registration_sequence trick used by ref_gl
     return &ps2ref.teximages[ps2ref.num_teximages++];
 }
 
 /*
 ==============
-Img_NameHash
+Local helpers:
+- IsPowerOfTwo
+- RoundToPowerOfTwo
+==============
+*/
+
+static inline int IsPowerOfTwo(int x)
+{
+    return (x > 0) && (x & (x - 1)) == 0;
+}
+
+static inline int RoundToPowerOfTwo(int x)
+{
+    if (IsPowerOfTwo(x))
+    {
+        return x;
+    }
+
+    // Round nearest:
+    int k;
+    for (k = sizeof(int) * 8 - 1; ((1 << k) & x) == 0; --k)
+    {
+    }
+
+    if (((1 << (k - 1)) & x) == 0)
+    {
+        return 1 << k;
+    }
+
+    int pot = 1 << (k + 1);
+    return (pot < MAX_TEXIMAGE_SIZE) ? pot : MAX_TEXIMAGE_SIZE;
+
+    // Round down:
+    /*
+    int p2;
+    for (p2 = 1; (p2 * 2) <= x; p2 <<= 1) { }
+    return (p2 < MAX_TEXIMAGE_SIZE) ? p2 : MAX_TEXIMAGE_SIZE;
+    */
+}
+
+/*
+==============
+PS2_Common8BitTexSetup
+==============
+*/
+static ps2_teximage_t * PS2_Common8BitTexSetup(const byte * pic8, int width, int height, const char * name, int flags)
+{
+    byte * expanded_pic;
+    byte * scaled_pic;
+    ps2_teximage_t * teximage;
+
+    int psm        = GS_PSM_16;
+    int format     = TEXTURE_COMPONENTS_RGB;
+    int mag_filter = LOD_MAG_LINEAR;
+    int min_filter = LOD_MIN_LINEAR;
+
+    // Clamp down to our size limit or round to PoT. This will also force RGBA32.
+    if (width  > MAX_TEXIMAGE_SIZE ||
+        height > MAX_TEXIMAGE_SIZE ||
+        !IsPowerOfTwo(width)       ||
+        !IsPowerOfTwo(height))
+    {
+        psm    = GS_PSM_32;
+        format = TEXTURE_COMPONENTS_RGBA;
+
+        const int scaled_width  = (width  >= MAX_TEXIMAGE_SIZE) ? MAX_TEXIMAGE_SIZE : RoundToPowerOfTwo(width);
+        const int scaled_height = (height >= MAX_TEXIMAGE_SIZE) ? MAX_TEXIMAGE_SIZE : RoundToPowerOfTwo(height);
+
+        expanded_pic = PS2_MemAlloc(width * height * 4, MEMTAG_TEXIMAGE);
+        scaled_pic   = PS2_MemAlloc(scaled_width * scaled_height * 4, MEMTAG_TEXIMAGE);
+
+        Img_UnPalettize32(width, height, pic8, global_palette, expanded_pic);
+        Img_Resample32((u32 *)expanded_pic, width, height, (u32 *)scaled_pic, scaled_width, scaled_height);
+
+        PS2_MemFree(expanded_pic, (width * height * 4), MEMTAG_TEXIMAGE);
+
+        width  = scaled_width;
+        height = scaled_height;
+        expanded_pic = scaled_pic;
+    }
+    else
+    {
+        int i;
+        const int pixel_count = width * height;
+
+        // Check if the image has transparency, if so, we need 32bit color.
+        for (i = 0; i < pixel_count; ++i)
+        {
+            if (pic8[i] == 255) // Transparent color
+            {
+                // Need 32bit RGBA.
+                psm    = GS_PSM_32;
+                format = TEXTURE_COMPONENTS_RGBA;
+                break;
+            }
+        }
+
+        if (format == TEXTURE_COMPONENTS_RGBA)
+        {
+            expanded_pic = PS2_MemAlloc(width * height * 4, MEMTAG_TEXIMAGE);
+            Img_UnPalettize32(width, height, pic8, global_palette, expanded_pic);
+        }
+        else // Use more compact 16bit RGB color.
+        {
+            expanded_pic = PS2_MemAlloc(width * height * 2, MEMTAG_TEXIMAGE);
+            Img_UnPalettize16(width, height, pic8, global_palette, expanded_pic);
+        }
+    }
+
+    // IT_BUILTIN is only used internally as a type.
+    // Can't be present if loaded from file, so mask it off.
+    const int img_type = flags & (~IT_BUILTIN);
+
+    // Sprites can do with a cheaper filtering.
+    // Pics (2D UI elements and such) actually look better with nearest sampling.
+    if (img_type & (IT_PIC | IT_SPRITE))
+    {
+        mag_filter = LOD_MAG_NEAREST;
+        min_filter = LOD_MIN_NEAREST;
+    }
+
+    // Finally, allocate and set up the image handle:
+    teximage = PS2_TexImageAlloc();
+    PS2_TexImageSetup(teximage, name, width, height, format, TEXTURE_FUNCTION_MODULATE,
+                      psm, mag_filter, min_filter, (ps2_imagetype_t)img_type, expanded_pic);
+
+    return teximage;
+}
+
+/*
+==============
+PS2_LoadPcxImpl
+==============
+*/
+static ps2_teximage_t * PS2_LoadPcxImpl(const char * name, int flags)
+{
+    int width;
+    int height;
+    byte * pic8;
+    ps2_teximage_t * teximage = NULL;
+
+    if (!PCX_LoadFromFile(name, &pic8, NULL, &width, &height))
+    {
+        Com_DPrintf("WARNING: Can't load PCX pic for '%s'\n", name);
+        return NULL;
+    }
+
+    // Try placing small images in the scrap atlas:
+    if ((flags & IT_PIC) && width <= 64 && height <= 166)
+    {
+        // Notice that we allow some pretty tall images (h <= 166).
+        // That's the size of m_main_plaque, the Quake2 logo on
+        // the main menu. This image was impossible to resize in
+        // a descent way on allocation, so I've change the atlas
+        // allocation criteria here to allow it's height, so it
+        // will not be a standalone image and won't require a resize.
+        teximage = Scrap_AllocBlock(pic8, width, height, name);
+    }
+
+    // Atlas full or image too big, create a standalone texture:
+    if (teximage == NULL)
+    {
+        teximage = PS2_Common8BitTexSetup(pic8, width, height, name, flags);
+    }
+
+    // The palettized image is no longer needed.
+    PS2_MemFree(pic8, width * height, MEMTAG_TEXIMAGE);
+    return teximage;
+}
+
+/*
+==============
+PS2_LoadWalImpl
+==============
+*/
+static ps2_teximage_t * PS2_LoadWalImpl(const char * name, int flags)
+{
+    ps2_teximage_t * teximage;
+    const miptex_t * wall;
+    const byte     * pic8;
+    int width;
+    int height;
+    int offset;
+    int data_len;
+
+    data_len = FS_LoadFile(name, (void **)&wall);
+    if (wall == NULL || data_len <= 0)
+    {
+        Com_DPrintf("WARNING: Can't load WAL texture for '%s'\n", name);
+        return NULL;
+    }
+
+    width  = LittleLong(wall->width);
+    height = LittleLong(wall->height);
+    offset = LittleLong(wall->offsets[0]);
+    pic8   = (const byte *)wall + offset;
+
+    teximage = PS2_Common8BitTexSetup(pic8, width, height, name, flags | IT_WALL);
+
+    FS_FreeFile((void *)wall);
+    return teximage;
+}
+
+/*
+==============
+PS2_LoadTgaImpl
+==============
+*/
+static ps2_teximage_t * PS2_LoadTgaImpl(const char * name, int flags)
+{
+    byte * pic32;
+    int width;
+    int height;
+
+    if (!TGA_LoadFromFile(name, &pic32, &width, &height))
+    {
+        Com_DPrintf("WARNING: Can't load TGA texture for '%s'\n", name);
+        return NULL;
+    }
+
+    // IT_BUILTIN is only used internally as a type.
+    // Can't be present if loaded from file, so mask it off.
+    const int img_type = flags & (~IT_BUILTIN);
+
+    // TGA defaults:
+    const int psm         = GS_PSM_32;
+    const int format      = TEXTURE_COMPONENTS_RGBA;
+    const int mag_filter  = LOD_MAG_LINEAR;
+    const int min_filter  = LOD_MIN_LINEAR;
+
+    //
+    // TGAs are always expanded to RGBA, so no extra conversion is needed.
+    //
+    // NOTE: We assume TGAs will always be under the maximum texture size (256^2).
+    // This should be true, since TGAs are only used for the skyboxes in Quake2.
+    // If that assumption is violated, you'll get a Sys_Error in the image setup.
+    //
+    ps2_teximage_t * teximage = PS2_TexImageAlloc();
+    PS2_TexImageSetup(teximage, name, width, height, format, TEXTURE_FUNCTION_MODULATE,
+                      psm, mag_filter, min_filter, (ps2_imagetype_t)img_type, pic32);
+
+    return teximage;
+}
+
+/*
+==============
+PS2_ImageNameHash
+
 OAT - One-At-a-Time hash of the filename of an image.
 https://en.wikipedia.org/wiki/Jenkins_hash_function
 ==============
 */
-static inline u32 Img_NameHash(const char * name)
+static inline u32 PS2_ImageNameHash(const char * name)
 {
     u32 hash = 0;
 
@@ -212,28 +460,30 @@ static inline u32 Img_NameHash(const char * name)
 
 /*
 ==============
-Img_FindImpl
+PS2_FindImageImpl
 ==============
 */
-static ps2_teximage_t * Img_FindImpl(const char * name, int flags)
+static ps2_teximage_t * PS2_FindImageImpl(const char * name, int flags)
 {
     if (name == NULL)
     {
-        Com_DPrintf("FindImage: Null name!");
+        Com_DPrintf("PS2_FindImageImpl: Null name!\n");
         return NULL;
     }
 
     const u32 name_len = strlen(name);
-    if (name_len < 5)
+    if (name_len < 5 || name_len >= MAX_QPATH)
     {
-        Com_DPrintf("FindImage: Bad name, too short: %s", name);
+        Com_DPrintf("PS2_FindImageImpl: Bad image name: '%s'\n", name);
         return NULL;
     }
 
     // Compare by hash code, much cheaper.
-    const u32 name_hash = Img_NameHash(name);
+    const u32 name_hash = PS2_ImageNameHash(name);
 
+    //
     // First, lookup our cache:
+    //
     u32 i;
     const u32 num_teximages    = ps2ref.num_teximages;
     ps2_teximage_t * teximages = ps2ref.teximages;
@@ -246,7 +496,25 @@ static ps2_teximage_t * Img_FindImpl(const char * name, int flags)
         }
     }
 
-    //TODO load form file
+    //
+    // Load from file for the first time:
+    //
+    if (strcmp(name + name_len - 4, ".pcx") == 0)
+    {
+        return PS2_LoadPcxImpl(name, flags);
+    }
+
+    if (strcmp(name + name_len - 4, ".wal") == 0)
+    {
+        return PS2_LoadWalImpl(name, flags);
+    }
+
+    if (strcmp(name + name_len - 4, ".tga") == 0)
+    {
+        return PS2_LoadTgaImpl(name, flags);
+    }
+
+    Com_DPrintf("WARNING: Unable to find image '%s'\n", name);
     return NULL;
 }
 
@@ -260,17 +528,25 @@ ps2_teximage_t * PS2_TexImageFindOrLoad(const char * name, int flags)
     ps2_teximage_t * teximage;
     char fullname[MAX_QPATH];
 
-    // This is the same logic used by ref_gl.
-    // If the name doesn't start with a path separator, its just the base
-    // filename, like "conchars", otherwise the full file path is specified in 'name'.
-    if (name[0] != '/' && name[0] != '\\')
+    if (flags & (IT_PIC | IT_BUILTIN))
     {
-        Com_sprintf(fullname, sizeof(fullname), "pics/%s.pcx", name);
-        teximage = Img_FindImpl(fullname, flags);
+        // This is the same logic used by ref_gl.
+        // If the name doesn't start with a path separator, its just the base
+        // filename, like "conchars", otherwise the full file path is specified in 'name'.
+        if (name[0] != '/' && name[0] != '\\')
+        {
+            Com_sprintf(fullname, sizeof(fullname), "pics/%s.pcx", name);
+            teximage = PS2_FindImageImpl(fullname, flags);
+        }
+        else
+        {
+            teximage = PS2_FindImageImpl(name + 1, flags);
+        }
     }
     else
     {
-        teximage = Img_FindImpl(name + 1, flags);
+        // Skins, walls, etc.
+        teximage = PS2_FindImageImpl(name, flags);
     }
 
     return teximage;
@@ -318,7 +594,7 @@ void PS2_TexImageSetup(ps2_teximage_t * teximage, const char * name, int w, int 
 
     // Finally, copy and hash the name string:
     strncpy(teximage->name, name, MAX_QPATH);
-    teximage->hash = Img_NameHash(name);
+    teximage->hash = PS2_ImageNameHash(name);
 }
 
 /*
@@ -331,10 +607,86 @@ void PS2_TexImageFree(ps2_teximage_t * teximage)
     // Built-ins will always be referencing static program data.
     if (teximage->pic != NULL && teximage->type != IT_BUILTIN)
     {
-        PS2_MemFree(teximage->pic, MEMTAG_TEXIMAGE);
+        int size_bytes;
+        switch (teximage->texbuf.psm)
+        {
+        case GS_PSM_32 :
+            size_bytes = (teximage->width * teximage->height * 4);
+            break;
+        case GS_PSM_16 :
+            size_bytes = (teximage->width * teximage->height * 2);
+            break;
+        default : // Assume 8bits palettized.
+            size_bytes = (teximage->width * teximage->height * 1);
+            break;
+        } // switch (teximage->texbuf.psm)
+
+        PS2_MemFree(teximage->pic, size_bytes, MEMTAG_TEXIMAGE);
     }
 
     PS2_MemClearObj(teximage);
+}
+
+/*
+==============
+Img_Resample32
+
+Adapted from ref_gl GL_ResampleTexture.
+NOTE: Input and out images must be different buffers!
+==============
+*/
+void Img_Resample32(const u32 * restrict in_img, int in_width, int in_height,
+                    u32 * restrict out_img, int out_width, int out_height)
+{
+    int i, j;
+    u32 frac;
+    const u32  * inrow;
+    const u32  * inrow2;
+    const byte * pix1;
+    const byte * pix2;
+    const byte * pix3;
+    const byte * pix4;
+
+    // 512 is the max output w|h. We only really use up to 256 (MAX_TEXIMAGE_SIZE).
+    u32 p1[512] __attribute__((aligned(16)));
+    u32 p2[512] __attribute__((aligned(16)));
+
+    const u32 fracstep = in_width * 0x10000 / out_width;
+
+    frac = fracstep >> 2;
+    for (i = 0; i < out_width; i++)
+    {
+        p1[i] = 4 * (frac >> 16);
+        frac += fracstep;
+    }
+
+    frac = 3 * (fracstep >> 2);
+    for (i = 0; i < out_width; i++)
+    {
+        p2[i] = 4 * (frac >> 16);
+        frac += fracstep;
+    }
+
+    // This is a box filter, I think...
+    for (i = 0; i < out_height; i++, out_img += out_width)
+    {
+        inrow  = in_img + in_width * (int)((i + 0.25) * in_height / out_height);
+        inrow2 = in_img + in_width * (int)((i + 0.75) * in_height / out_height);
+        frac = fracstep >> 1;
+
+        for (j = 0; j < out_width; j++)
+        {
+            pix1 = (const byte *)inrow  + p1[j];
+            pix2 = (const byte *)inrow  + p2[j];
+            pix3 = (const byte *)inrow2 + p1[j];
+            pix4 = (const byte *)inrow2 + p2[j];
+
+            ((byte *)(out_img + j))[0] = (pix1[0] + pix2[0] + pix3[0] + pix4[0]) >> 2;
+            ((byte *)(out_img + j))[1] = (pix1[1] + pix2[1] + pix3[1] + pix4[1]) >> 2;
+            ((byte *)(out_img + j))[2] = (pix1[2] + pix2[2] + pix3[2] + pix4[2]) >> 2;
+            ((byte *)(out_img + j))[3] = (pix1[3] + pix2[3] + pix3[3] + pix4[3]) >> 2;
+        }
+    }
 }
 
 //=============================================================================
@@ -435,6 +787,7 @@ ps2_teximage_t * Scrap_AllocBlock(const byte * pic8in, int w, int h, const char 
 /*
 ==============
 PCX_LoadFromMemory
+
 'pic' and 'palette' can be null if you want to ignore one or the other.
 If 'palette' is not null, it must point to an array of 256 32bit integers.
 Mostly adapted from ref_gl/gl_image.c
@@ -466,7 +819,7 @@ qboolean PCX_LoadFromMemory(const char * filename, const byte * data, int data_l
     if (manufacturer != 0x0A || version != 5 || encoding != 1 ||
         bits_per_pixel != 8  || xmax >= 640  || ymax >= 480)
     {
-        Sys_Error("Bad PCX file %s. Invalid header value(s)!", filename);
+        Com_DPrintf("Bad PCX file %s. Invalid header value(s)!\n", filename);
         return false;
     }
 
@@ -537,9 +890,12 @@ qboolean PCX_LoadFromMemory(const char * filename, const byte * data, int data_l
 
     if ((data - (const byte *)pcx) > data_len)
     {
-        Sys_Error("PCX image %s was malformed!", filename);
-        PS2_MemFree(*pic, MEMTAG_TEXIMAGE);
+        Com_DPrintf("PCX image %s was malformed!\n", filename);
+
+        int size_bytes = (xmax + 1) * (ymax + 1);
+        PS2_MemFree(*pic, size_bytes, MEMTAG_TEXIMAGE);
         *pic = NULL;
+
         return false;
     }
 
@@ -549,6 +905,7 @@ qboolean PCX_LoadFromMemory(const char * filename, const byte * data, int data_l
 /*
 ==============
 PCX_LoadFromFile
+
 Mostly adapted from ref_gl/gl_image.c
 ==============
 */
@@ -562,7 +919,7 @@ qboolean PCX_LoadFromFile(const char * filename, byte ** pic,
     data_len = FS_LoadFile(filename, (void **)&data);
     if (data == NULL || data_len <= 0)
     {
-        Sys_Error("Bad PCX file %s", filename);
+        Com_DPrintf("Bad PCX file '%s'\n", filename);
         return false;
     }
 
@@ -574,6 +931,271 @@ qboolean PCX_LoadFromFile(const char * filename, byte ** pic,
 
 //=============================================================================
 //
+// TGA image loading helpers:
+//
+//=============================================================================
+
+typedef struct
+{
+    byte id_length;
+    byte colormap_type;
+    byte image_type;
+    u16  colormap_index;
+    u16  colormap_length;
+    byte colormap_size;
+    u16  x_origin;
+    u16  y_origin;
+    u16  width;
+    u16  height;
+    byte pixel_size;
+    byte attributes;
+} tga_header_t;
+
+/*
+==============
+TGA_LoadFromFile
+
+Mostly adapted from LoadTGA, ref_gl/gl_image.c
+NOTE: Output image is always RGBA 32bits.
+==============
+*/
+qboolean TGA_LoadFromFile(const char * filename, byte ** pic, int * width, int * height)
+{
+    tga_header_t targa_header;
+
+    int data_len;
+    int pixel_count;
+    int column, columns;
+    int row, rows;
+
+    byte * pixbuf;
+    byte * buf_p;
+    byte * buffer;
+    byte * targa_rgba;
+    byte tmp[2];
+
+    *pic = NULL;
+
+    data_len = FS_LoadFile(filename, (void **)&buffer);
+    if (buffer == NULL || data_len <= 0)
+    {
+        Com_DPrintf("Bad TGA file '%s'\n", filename);
+        return false;
+    }
+
+    buf_p = buffer;
+    targa_header.id_length     = *buf_p++;
+    targa_header.colormap_type = *buf_p++;
+    targa_header.image_type    = *buf_p++;
+
+    tmp[0] = buf_p[0];
+    tmp[1] = buf_p[1];
+    targa_header.colormap_index = LittleShort(*((short *)tmp));
+    buf_p += 2;
+
+    tmp[0] = buf_p[0];
+    tmp[1] = buf_p[1];
+    targa_header.colormap_length = LittleShort(*((short *)tmp));
+    buf_p += 2;
+
+    targa_header.colormap_size = *buf_p++;
+
+    targa_header.x_origin = LittleShort(*((short *)buf_p));
+    buf_p += 2;
+
+    targa_header.y_origin = LittleShort(*((short *)buf_p));
+    buf_p += 2;
+
+    targa_header.width = LittleShort(*((short *)buf_p));
+    buf_p += 2;
+
+    targa_header.height = LittleShort(*((short *)buf_p));
+    buf_p += 2;
+
+    targa_header.pixel_size = *buf_p++;
+    targa_header.attributes = *buf_p++;
+
+    if (targa_header.image_type != 2 && targa_header.image_type != 10)
+    {
+        Com_DPrintf("TGA_LoadFromFile: Only type 2 and 10 targa RGB images supported! %s\n", filename);
+        FS_FreeFile(buffer);
+        return false;
+    }
+
+    if (targa_header.colormap_type != 0 || (targa_header.pixel_size != 32 && targa_header.pixel_size != 24))
+    {
+        Com_DPrintf("TGA_LoadFromFile: Only 32 or 24 bit images supported (no colormaps)! %s\n", filename);
+        FS_FreeFile(buffer);
+        return false;
+    }
+
+    columns     = targa_header.width;
+    rows        = targa_header.height;
+    pixel_count = columns * rows;
+
+    if (width != NULL)
+    {
+        *width = columns;
+    }
+    if (height != NULL)
+    {
+        *height = rows;
+    }
+
+    targa_rgba = PS2_MemAlloc(pixel_count * 4, MEMTAG_TEXIMAGE);
+    *pic = targa_rgba;
+
+    if (targa_header.id_length != 0)
+    {
+        buf_p += targa_header.id_length; // skip TARGA image comment
+    }
+
+    if (targa_header.image_type == 2) // Uncompressed, RGB images
+    {
+        for (row = rows - 1; row >= 0; --row)
+        {
+            pixbuf = targa_rgba + row * columns * 4;
+            for (column = 0; column < columns; ++column)
+            {
+                byte red, green, blue, alpha;
+
+                switch (targa_header.pixel_size)
+                {
+                case 24 :
+                    blue      = *buf_p++;
+                    green     = *buf_p++;
+                    red       = *buf_p++;
+                    *pixbuf++ = red;
+                    *pixbuf++ = green;
+                    *pixbuf++ = blue;
+                    *pixbuf++ = 255;
+                    break;
+
+                case 32 :
+                    blue      = *buf_p++;
+                    green     = *buf_p++;
+                    red       = *buf_p++;
+                    alpha     = *buf_p++;
+                    *pixbuf++ = red;
+                    *pixbuf++ = green;
+                    *pixbuf++ = blue;
+                    *pixbuf++ = alpha;
+                    break;
+                } // switch
+            }
+        }
+    }
+    else if (targa_header.image_type == 10) // Run-length encoded RGB images
+    {
+        byte red, green, blue, alpha;
+        byte packetHeader, packetSize, j;
+
+        for (row = rows - 1; row >= 0; --row)
+        {
+            pixbuf = targa_rgba + row * columns * 4;
+            for (column = 0; column < columns;)
+            {
+                packetHeader = *buf_p++;
+                packetSize = 1 + (packetHeader & 0x7F);
+
+                if (packetHeader & 0x80) // Run-length packet
+                {
+                    switch (targa_header.pixel_size)
+                    {
+                    case 24 :
+                        blue  = *buf_p++;
+                        green = *buf_p++;
+                        red   = *buf_p++;
+                        alpha = 255;
+                        break;
+
+                    case 32 :
+                        blue  = *buf_p++;
+                        green = *buf_p++;
+                        red   = *buf_p++;
+                        alpha = *buf_p++;
+                        break;
+                    } // switch
+
+                    for (j = 0; j < packetSize; ++j)
+                    {
+                        *pixbuf++ = red;
+                        *pixbuf++ = green;
+                        *pixbuf++ = blue;
+                        *pixbuf++ = alpha;
+
+                        ++column;
+                        if (column == columns) // run spans across rows
+                        {
+                            column = 0;
+                            if (row > 0)
+                            {
+                                --row;
+                            }
+                            else
+                            {
+                                goto BREAKOUT;
+                            }
+                            pixbuf = targa_rgba + row * columns * 4;
+                        }
+                    }
+                }
+                else // Non run-length packet
+                {
+                    for (j = 0; j < packetSize; ++j)
+                    {
+                        switch (targa_header.pixel_size)
+                        {
+                        case 24 :
+                            blue      = *buf_p++;
+                            green     = *buf_p++;
+                            red       = *buf_p++;
+                            *pixbuf++ = red;
+                            *pixbuf++ = green;
+                            *pixbuf++ = blue;
+                            *pixbuf++ = 255;
+                            break;
+
+                        case 32 :
+                            blue      = *buf_p++;
+                            green     = *buf_p++;
+                            red       = *buf_p++;
+                            alpha     = *buf_p++;
+                            *pixbuf++ = red;
+                            *pixbuf++ = green;
+                            *pixbuf++ = blue;
+                            *pixbuf++ = alpha;
+                            break;
+                        } // switch
+
+                        ++column;
+                        if (column == columns) // pixel packet run spans across rows
+                        {
+                            column = 0;
+                            if (row > 0)
+                            {
+                                --row;
+                            }
+                            else
+                            {
+                                goto BREAKOUT;
+                            }
+                            pixbuf = targa_rgba + row * columns * 4;
+                        }
+                    }
+                }
+            }
+        BREAKOUT:
+            ;
+        }
+    }
+
+    FS_FreeFile(buffer);
+    return true;
+}
+
+//=============================================================================
+//
 // Palettized image expansion:
 //
 //=============================================================================
@@ -581,7 +1203,8 @@ qboolean PCX_LoadFromFile(const char * filename, byte ** pic,
 /*
 ==============
 Img_UnPalettize32
-Base algorithm adapted from GL_Upload8 in ref_gl/gl_image.c
+
+Transparency algorithm adapted from GL_Upload8 in ref_gl/gl_image.c
 ==============
 */
 void Img_UnPalettize32(int width, int height, const byte * restrict pic8in,

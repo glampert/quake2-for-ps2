@@ -247,11 +247,15 @@ void SV_SpawnServer(char * server, char * spawnpoint, server_state_t serverstate
     }
     else
     {
-        Com_sprintf(sv.configstrings[CS_MODELS + 1], sizeof(sv.configstrings[CS_MODELS + 1]),
+        Com_sprintf(sv.configstrings[CS_MODELS + 1],
+                    sizeof(sv.configstrings[CS_MODELS + 1]),
                     "maps/%s.bsp", server);
+
         sv.models[1] = CM_LoadMap(sv.configstrings[CS_MODELS + 1], false, &checksum);
     }
-    Com_sprintf(sv.configstrings[CS_MAPCHECKSUM], sizeof(sv.configstrings[CS_MAPCHECKSUM]),
+
+    Com_sprintf(sv.configstrings[CS_MAPCHECKSUM],
+                sizeof(sv.configstrings[CS_MAPCHECKSUM]),
                 "%i", checksum);
 
     //
@@ -261,8 +265,10 @@ void SV_SpawnServer(char * server, char * spawnpoint, server_state_t serverstate
 
     for (i = 1; i < CM_NumInlineModels(); i++)
     {
-        Com_sprintf(sv.configstrings[CS_MODELS + 1 + i], sizeof(sv.configstrings[CS_MODELS + 1 + i]),
+        Com_sprintf(sv.configstrings[CS_MODELS + 1 + i],
+                    sizeof(sv.configstrings[CS_MODELS + 1 + i]),
                     "*%i", i);
+
         sv.models[i + 1] = CM_InlineModel(sv.configstrings[CS_MODELS + 1 + i]);
     }
 

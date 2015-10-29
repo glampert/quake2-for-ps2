@@ -119,7 +119,6 @@ field_t fields[] = {
     { "nextmap", STOFS(nextmap), F_LSTRING, FFL_SPAWNTEMP },
 
     { 0, 0, 0, 0 }
-
 };
 
 field_t levelfields[] =
@@ -760,7 +759,9 @@ void ReadLevel(char * filename)
 
         // fire any cross-level triggers
         if (ent->classname)
+        {
             if (strcmp(ent->classname, "target_crosslevel_target") == 0)
                 ent->nextthink = level.time + ent->delay;
+        }
     }
 }

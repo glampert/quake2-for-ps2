@@ -475,7 +475,7 @@ void Cmd_Alias_f(void)
     }
     strcat(cmd, "\n");
 
-    a->value = CopyString(cmd);
+    a->value = Q_CopyString(cmd);
 }
 
 /*

@@ -1031,7 +1031,7 @@ int memsearch(const byte * start, int count, int search)
     return -1;
 }
 
-char * CopyString(const char * in)
+char * Q_CopyString(const char * in)
 {
     char * out;
     out = Z_Malloc(strlen(in) + 1);
@@ -1087,10 +1087,15 @@ void Info_Print(char * s)
 
                         ZONE MEMORY ALLOCATION
 
-just cleared malloc with counters now...
-
 ==============================================================================
 */
+
+//
+// LAMPERT 2015-10-28
+// Replaced malloc/free with the PS2 memory allocation wrappers to keep
+// count of all memory allocations, plus a few other minor changes.
+//
+#include "ps2/mem_alloc.h"
 
 enum
 {
@@ -1099,14 +1104,16 @@ enum
 
 typedef struct zhead_s
 {
-    struct zhead_s *prev, *next;
+    struct zhead_s * prev;
+    struct zhead_s * next;
     short magic;
     short tag; // for group free
     int size;
 } zhead_t;
 
-zhead_t z_chain;
-int z_count, z_bytes;
+static zhead_t z_chain;
+static int z_count;
+static int z_bytes;
 
 /*
 ========================
@@ -1115,8 +1122,7 @@ Z_Free
 */
 void Z_Free(void * ptr)
 {
-    zhead_t * z;
-    z = ((zhead_t *)ptr) - 1;
+    zhead_t * z = ((zhead_t *)ptr) - 1;
 
     if (z->magic != Z_MAGIC)
     {
@@ -1128,17 +1134,8 @@ void Z_Free(void * ptr)
 
     z_count--;
     z_bytes -= z->size;
-    free(z);
-}
 
-/*
-========================
-Z_Stats_f
-========================
-*/
-void Z_Stats_f(void)
-{
-    Com_Printf("%i bytes in %i blocks\n", z_bytes, z_count);
+    PS2_MemFree(z, z->size, MEMTAG_QUAKE);
 }
 
 /*
@@ -1148,7 +1145,8 @@ Z_FreeTags
 */
 void Z_FreeTags(int tag)
 {
-    zhead_t *z, *next;
+    zhead_t * z;
+    zhead_t * next;
     for (z = z_chain.next; z != &z_chain; z = next)
     {
         next = z->next;
@@ -1169,9 +1167,9 @@ void * Z_TagMalloc(int size, int tag)
     zhead_t * z;
 
     size = size + sizeof(zhead_t);
-    z = malloc(size);
+    z = PS2_MemAlloc(size, MEMTAG_QUAKE);
 
-    if (!z)
+    if (z == NULL)
     {
         Sys_Error("Z_Malloc: Failed on allocation of %i bytes!", size);
     }
@@ -1180,8 +1178,8 @@ void * Z_TagMalloc(int size, int tag)
     z_count++;
     z_bytes += size;
     z->magic = Z_MAGIC;
-    z->tag = tag;
-    z->size = size;
+    z->tag   = tag;
+    z->size  = size;
 
     z->next = z_chain.next;
     z->prev = &z_chain;
@@ -1199,6 +1197,16 @@ Z_Malloc
 void * Z_Malloc(int size)
 {
     return Z_TagMalloc(size, 0);
+}
+
+/*
+========================
+Z_Stats_f
+========================
+*/
+void Z_Stats_f(void)
+{
+    Com_Printf("%i bytes in %i blocks\n", z_bytes, z_count);
 }
 
 //============================================================================

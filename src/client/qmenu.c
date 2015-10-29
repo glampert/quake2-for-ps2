@@ -24,28 +24,35 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "client.h"
 #include "qmenu.h"
 
-void Action_DoEnter(menuaction_s * a);
-void Action_Draw(menuaction_s * a);
-void Menu_DrawStatusBar(const char * string);
-void Menulist_DoEnter(menulist_s * l);
-void MenuList_Draw(menulist_s * l);
-void Separator_Draw(menuseparator_s * s);
-void Slider_DoSlide(menuslider_s * s, int dir);
-void Slider_Draw(menuslider_s * s);
-void SpinControl_DoEnter(menulist_s * s);
-void SpinControl_Draw(menulist_s * s);
-void SpinControl_DoSlide(menulist_s * s, int dir);
+static void Action_DoEnter(menuaction_s * a);
+static void Action_Draw(menuaction_s * a);
+static void Menu_DrawStatusBar(const char * string);
+static void Menulist_DoEnter(menulist_s * l);
+static void MenuList_Draw(menulist_s * l);
+static void Separator_Draw(menuseparator_s * s);
+static void Slider_DoSlide(menuslider_s * s, int dir);
+static void Slider_Draw(menuslider_s * s);
+static void SpinControl_DoEnter(menulist_s * s);
+static void SpinControl_Draw(menulist_s * s);
+static void SpinControl_DoSlide(menulist_s * s, int dir);
 
 extern refexport_t re;
 extern viddef_t viddef;
 
-#define RCOLUMN_OFFSET  16
-#define LCOLUMN_OFFSET -16
+enum
+{
+    RCOLUMN_OFFSET =  16,
+    LCOLUMN_OFFSET = -16
+};
+
+//=============================================================================
 
 void Action_DoEnter(menuaction_s * a)
 {
     if (a->generic.callback)
+    {
         a->generic.callback(a);
+    }
 }
 
 void Action_Draw(menuaction_s * a)
@@ -187,8 +194,8 @@ qboolean Field_Key(menufield_s * f, int key)
     }
 
     /*
-	** support pasting from the clipboard
-	*/
+    ** support pasting from the clipboard
+    */
     if ((toupper(key) == 'V' && keydown[K_CTRL]) ||
         (((key == K_INS) || (key == K_KP_INS)) && keydown[K_SHIFT]))
     {
@@ -201,10 +208,13 @@ qboolean Field_Key(menufield_s * f, int key)
             strncpy(f->buffer, cbd, f->length - 1);
             f->cursor = strlen(f->buffer);
             f->visible_offset = f->cursor - f->visible_length;
-            if (f->visible_offset < 0)
-                f->visible_offset = 0;
 
-            free(cbd);
+            if (f->visible_offset < 0)
+            {
+                f->visible_offset = 0;
+            }
+
+            Z_Free(cbd);
         }
         return true;
     }
@@ -284,8 +294,8 @@ void Menu_AdjustCursor(menuframework_s * m, int dir)
     menucommon_s * citem;
 
     /*
-	** see if it's in a valid spot
-	*/
+    ** see if it's in a valid spot
+    */
     if (m->cursor >= 0 && m->cursor < m->nitems)
     {
         if ((citem = Menu_ItemAtCursor(m)) != 0)
@@ -296,9 +306,9 @@ void Menu_AdjustCursor(menuframework_s * m, int dir)
     }
 
     /*
-	** it's not in a valid spot, so crawl in the direction indicated until we
-	** find a valid spot
-	*/
+    ** it's not in a valid spot, so crawl in the direction indicated until we
+    ** find a valid spot
+    */
     if (dir == 1)
     {
         while (1)
@@ -343,8 +353,8 @@ void Menu_Draw(menuframework_s * menu)
     menucommon_s * item;
 
     /*
-	** draw contents
-	*/
+    ** draw contents
+    */
     for (i = 0; i < menu->nitems; i++)
     {
         switch (((menucommon_s *)menu->items[i])->type)
@@ -487,10 +497,10 @@ qboolean Menu_SelectItem(menuframework_s * s)
             Action_DoEnter((menuaction_s *)item);
             return true;
         case MTYPE_LIST:
-            //			Menulist_DoEnter( ( menulist_s * ) item );
+            // Menulist_DoEnter( ( menulist_s * ) item );
             return false;
         case MTYPE_SPINCONTROL:
-            //			SpinControl_DoEnter( ( menulist_s * ) item );
+            // SpinControl_DoEnter( ( menulist_s * ) item );
             return false;
         }
     }
@@ -596,7 +606,10 @@ void Slider_DoSlide(menuslider_s * s, int dir)
         s->generic.callback(s);
 }
 
-#define SLIDER_RANGE 10
+enum
+{
+    SLIDER_RANGE = 10
+};
 
 void Slider_Draw(menuslider_s * s)
 {
@@ -612,9 +625,12 @@ void Slider_Draw(menuslider_s * s)
         s->range = 0;
     if (s->range > 1)
         s->range = 1;
+
     re.DrawChar(s->generic.x + s->generic.parent->x + RCOLUMN_OFFSET, s->generic.y + s->generic.parent->y, 128);
+
     for (i = 0; i < SLIDER_RANGE; i++)
         re.DrawChar(RCOLUMN_OFFSET + s->generic.x + i * 8 + s->generic.parent->x + 8, s->generic.y + s->generic.parent->y, 129);
+
     re.DrawChar(RCOLUMN_OFFSET + s->generic.x + i * 8 + s->generic.parent->x + 8, s->generic.y + s->generic.parent->y, 130);
     re.DrawChar((int)(8 + RCOLUMN_OFFSET + s->generic.parent->x + s->generic.x + (SLIDER_RANGE - 1) * 8 * s->range), s->generic.y + s->generic.parent->y, 131);
 }

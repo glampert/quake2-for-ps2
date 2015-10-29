@@ -192,10 +192,9 @@ void S_Shutdown(void)
 /*
 ==================
 S_FindName
-
 ==================
 */
-sfx_t * S_FindName(char * name, qboolean create)
+sfx_t * S_FindName(const char * name, qboolean create)
 {
     int i;
     sfx_t * sfx;
@@ -221,7 +220,7 @@ sfx_t * S_FindName(char * name, qboolean create)
     // find a free sfx
     for (i = 0; i < num_sfx; i++)
         if (!known_sfx[i].name[0])
-            //			registration_sequence < s_registration_sequence)
+            // registration_sequence < s_registration_sequence)
             break;
 
     if (i == num_sfx)
@@ -293,7 +292,7 @@ S_RegisterSound
 
 ==================
 */
-sfx_t * S_RegisterSound(char * name)
+sfx_t * S_RegisterSound(const char * name)
 {
     sfx_t * sfx;
 
@@ -716,7 +715,7 @@ void S_StartSound(vec3_t origin, int entnum, int entchannel, sfx_t * sfx, float 
 S_StartLocalSound
 ==================
 */
-void S_StartLocalSound(char * sound)
+void S_StartLocalSound(const char * sound)
 {
     sfx_t * sfx;
 

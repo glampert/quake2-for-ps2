@@ -1,0 +1,25 @@
+
+-----------
+ Misc info
+-----------
+
+- I ran Clang-Format on all the original Quake2 source files to fix multiple
+  formatting issues and replace tabs with spaces, so that it displays nicely
+  and uniformly on all browsers and editors. The Clang-Format style file used
+  can be found at the root of the project. I tried to tune it to maintain the
+  overall style used by id, so the code should look pretty much the same as
+  before, but with the advantage of uniform indenting and spacing through.
+
+- Changes made by me in the Quake2 source code are usually annotated by a nearby
+  comment stating the change made and sometimes the date when it was first
+  made. These comments will start with my name (e.g.: LAMPERT), followed
+  by a brief description.
+
+- Other minor changes such as removing or adding blank lines, adding curly
+  braces to flow-control statements, adding `static` to local functions or data,
+  are not always marked with comments to avoid excessive verbosity.
+
+- The vast majority of the code related to the PS2 port is located inside the
+  src/ps2/ directory. Changes made in the Quake2 source to account for the
+  PlayStation2 are clearly marked as such.
+

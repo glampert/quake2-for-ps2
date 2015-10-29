@@ -881,6 +881,7 @@ void CL_Skins_f(void)
     {
         if (!cl.configstrings[CS_PLAYERSKINS + i][0])
             continue;
+
         Com_Printf("client %i: %s\n", i, cl.configstrings[CS_PLAYERSKINS + i]);
         SCR_UpdateScreen();
         Sys_SendKeyEvents(); // pump message loop
@@ -1787,7 +1788,8 @@ void CL_Frame(int msec)
     // predict all unacknowledged movements
     CL_PredictMovement();
 
-    // LAMPERT: We don't use a separate DLL on QPS2, so this is useless.
+    // LAMPERT:
+    // We don't use a separate DLL on QPS2, so this is useless.
     //
     // allow rendering DLL change
     //VID_CheckChanges();
@@ -1891,7 +1893,7 @@ void CL_Init(void)
 ===============
 CL_Shutdown
 
-FIXME: this is a callback from Sys_Quit and Com_Error.  It would be better
+FIXME: this is a callback from Sys_Quit and Com_Error. It would be better
 to run quit through here before the final handoff to the sys code.
 ===============
 */

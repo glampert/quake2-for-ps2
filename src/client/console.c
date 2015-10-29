@@ -95,7 +95,9 @@ void Con_ToggleConsole_f(void)
         cls.key_dest = key_console;
 
         if (Cvar_VariableValue("maxclients") == 1 && Com_ServerState())
+        {
             Cvar_Set("paused", "1");
+        }
     }
 }
 
@@ -117,7 +119,9 @@ void Con_ToggleChat_f(void)
         }
     }
     else
+    {
         cls.key_dest = key_console;
+    }
 
     Con_ClearNotify();
 }

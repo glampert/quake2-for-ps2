@@ -29,6 +29,8 @@ VID_MenuInit
 */
 void VID_MenuInit(void)
 {
+    // TODO
+    // Video config menu for Quake2.
 }
 
 /*
@@ -38,6 +40,8 @@ VID_MenuDraw
 */
 void VID_MenuDraw(void)
 {
+    // TODO
+    // Video config menu for Quake2.
 }
 
 /*
@@ -47,7 +51,8 @@ VID_MenuKey
 */
 const char * VID_MenuKey(int k)
 {
-    return NULL;
+    // TODO
+    return NULL; // Video config menu for Quake2.
 }
 
 /*

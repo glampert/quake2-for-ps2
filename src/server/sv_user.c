@@ -43,8 +43,11 @@ void SV_BeginDemoserver(void)
 
     Com_sprintf(name, sizeof(name), "demos/%s", sv.name);
     FS_FOpenFile(name, &sv.demofile);
+
     if (!sv.demofile)
+    {
         Com_Error(ERR_DROP, "Couldn't open %s\n", name);
+    }
 }
 
 /*
@@ -93,6 +96,7 @@ void SV_New_f(void)
         playernum = -1;
     else
         playernum = sv_client - svs.clients;
+
     MSG_WriteShort(&sv_client->netchan.message, playernum);
 
     // send full levelname
@@ -408,12 +412,16 @@ void SV_Nextserver(void)
 
     //ZOID, ss_pic can be nextserver'd in coop mode
     if (sv.state == ss_game || (sv.state == ss_pic && !Cvar_VariableValue("coop")))
+    {
         return; // can't nextserver while playing a normal game
+    }
 
     svs.spawncount++; // make sure another doesn't sneak in
     v = Cvar_VariableString("nextserver");
     if (!v[0])
+    {
         Cbuf_AddText("killserver\n");
+    }
     else
     {
         Cbuf_AddText(v);

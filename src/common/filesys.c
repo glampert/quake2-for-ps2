@@ -72,17 +72,24 @@ typedef struct searchpath_s
     struct searchpath_s * next;
 } searchpath_t;
 
-char fs_gamedir[MAX_OSPATH];
-cvar_t * fs_basedir;
-cvar_t * fs_cddir;
-cvar_t * fs_gamedirvar;
+// LAMPERT 2015-10-27
+// Marked these locals as 'static'
+
+static char fs_gamedir[MAX_OSPATH];
+static cvar_t * fs_basedir;
+static cvar_t * fs_cddir;
 
 static filelink_t * fs_links;
 static searchpath_t * fs_searchpaths;
-static searchpath_t * fs_base_searchpaths; // without gamedirs
-static char fs_default_base_path[MAX_OSPATH] = ".";
+static searchpath_t * fs_base_searchpaths;          // Without gamedirs
+static char fs_default_base_path[MAX_OSPATH] = "."; // Added for QPS2
 
-/*
+// Externally referenced:
+int file_from_pak = 0;
+cvar_t * fs_gamedirvar = NULL;
+
+/* ===========================================================================
+
 All of Quake's data access is through a hierarchical file system, but the contents of
 the file system can be transparently merged from several sources.
 
@@ -96,7 +103,8 @@ files (savegames, screenshots, demos, config files) will be saved to. This can b
 with the "-game" command line parameter. The game directory can never be changed while quake
 is executing. This is a precaution against having a malicious server instruct clients to
 write files over areas they shouldn't.
-*/
+
+============================================================================== */
 
 /*
 ================
@@ -186,8 +194,6 @@ int Developer_searchpath(int who)
     }
     return 0;
 }
-
-int file_from_pak = 0;
 
 /*
 ===========
@@ -714,7 +720,7 @@ void FS_Link_f(void)
                 Z_Free(l);
                 return;
             }
-            l->to = CopyString(Cmd_Argv(2));
+            l->to = Q_CopyString(Cmd_Argv(2));
             return;
         }
         prev = &l->next;
@@ -724,9 +730,9 @@ void FS_Link_f(void)
     l = Z_Malloc(sizeof(*l));
     l->next = fs_links;
     fs_links = l;
-    l->from = CopyString(Cmd_Argv(1));
+    l->from = Q_CopyString(Cmd_Argv(1));
     l->fromlength = strlen(l->from);
-    l->to = CopyString(Cmd_Argv(2));
+    l->to = Q_CopyString(Cmd_Argv(2));
 }
 
 /*
@@ -757,7 +763,7 @@ char ** FS_ListFiles(char * findname, int * numfiles, unsigned musthave, unsigne
     nfiles++; // add space for a guard
     *numfiles = nfiles;
 
-    list = malloc(sizeof(char *) * nfiles);
+    list = Z_Malloc(sizeof(char *) * nfiles);
     memset(list, 0, sizeof(char *) * nfiles);
 
     s = Sys_FindFirst(findname, musthave, canthave);
@@ -766,7 +772,7 @@ char ** FS_ListFiles(char * findname, int * numfiles, unsigned musthave, unsigne
     {
         if (s[strlen(s) - 1] != '.')
         {
-            list[nfiles] = strdup(s);
+            list[nfiles] = Q_CopyString(s);
             #ifdef _WIN32
             strlwr(list[nfiles]);
             #endif // _WIN32
@@ -825,9 +831,9 @@ void FS_Dir_f(void)
                 {
                     Com_Printf("%s\n", dirnames[i]);
                 }
-                free(dirnames[i]);
+                Z_Free(dirnames[i]);
             }
-            free(dirnames);
+            Z_Free(dirnames);
         }
         Com_Printf("\n");
     }
@@ -836,7 +842,6 @@ void FS_Dir_f(void)
 /*
 ============
 FS_Path_f
-
 ============
 */
 void FS_Path_f(void)
@@ -907,6 +912,7 @@ char * FS_NextPath(char * prevpath)
 ================
 FS_SetDefaultBasePath
 
+LAMPERT:
 Added for QPS2 so we can change the game path prior to
 FS init and look for files in the USB drive or CDFS.
 ================
@@ -930,7 +936,7 @@ void FS_InitFilesystem(void)
 
     Cmd_AddCommand("path", FS_Path_f);
     Cmd_AddCommand("link", FS_Link_f);
-    Cmd_AddCommand("dir",  FS_Dir_f);
+    Cmd_AddCommand("dir", FS_Dir_f);
 
     //
     // basedir <path>

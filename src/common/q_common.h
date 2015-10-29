@@ -69,6 +69,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #elif defined PS2_QUAKE
 
 // LAMPERT: 2015-10-26
+// So the console prints a proper version string, instead of "NON-WIN32"
 #define BUILDSTRING "PS2-QUAKE"
 #define CPUSTRING   "EE-MIPS-R5900-LE"
 
@@ -158,7 +159,7 @@ void COM_AddParm(char * parm);
 void COM_Init(void);
 void COM_InitArgv(int argc, char ** argv);
 
-char * CopyString(const char * in);
+char * Q_CopyString(const char * in); // strdup replaces that used Z_Malloc.
 
 //============================================================================
 
@@ -512,7 +513,7 @@ extern qboolean userinfo_modified;
 /*
 ==============================================================
 
-NET
+NET layer
 
 ==============================================================
 */
@@ -544,26 +545,25 @@ typedef enum
 typedef struct
 {
     netadrtype_t type;
-
     byte ip[4];
     byte ipx[10];
-
     unsigned short port;
 } netadr_t;
 
 void NET_Init(void);
 void NET_Shutdown(void);
 void NET_Config(qboolean multiplayer);
+void NET_Sleep(int msec);
 
 qboolean NET_GetPacket(netsrc_t sock, netadr_t * net_from, sizebuf_t * net_message);
-void NET_SendPacket(netsrc_t sock, int length, void * data, netadr_t to);
+void NET_SendPacket(netsrc_t sock, int length, const void * data, netadr_t to);
 
 qboolean NET_CompareAdr(netadr_t a, netadr_t b);
 qboolean NET_CompareBaseAdr(netadr_t a, netadr_t b);
 qboolean NET_IsLocalAddress(netadr_t adr);
-char * NET_AdrToString(netadr_t a);
-qboolean NET_StringToAdr(char * s, netadr_t * a);
-void NET_Sleep(int msec);
+
+char * NET_AdrToString(netadr_t addr);
+qboolean NET_StringToAdr(const char * s, netadr_t * addr);
 
 //============================================================================
 
@@ -613,12 +613,13 @@ extern byte net_message_buffer[MAX_MSGLEN];
 void Netchan_Init(void);
 void Netchan_Setup(netsrc_t sock, netchan_t * chan, netadr_t adr, int qport);
 
-qboolean Netchan_NeedReliable(netchan_t * chan);
 void Netchan_Transmit(netchan_t * chan, int length, byte * data);
 void Netchan_OutOfBand(int net_socket, netadr_t adr, int length, byte * data);
 void Netchan_OutOfBandPrint(int net_socket, netadr_t adr, char * format, ...);
+
 qboolean Netchan_Process(netchan_t * chan, sizebuf_t * msg);
 qboolean Netchan_CanReliable(netchan_t * chan);
+qboolean Netchan_NeedReliable(netchan_t * chan);
 
 /*
 ==============================================================

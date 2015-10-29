@@ -18,16 +18,21 @@
 extern void Sys_Error(const char * error, ...);
 
 // For debug printing
-static const char * mem_tag_names[MEMTAG_COUNT] =
+const char * ps2_mem_tag_names[MEMTAG_COUNT] =
 {
-    "MEMTAG_FILESYS",
-    "MEMTAG_HUNK_ALLOC",
-    "MEMTAG_TEXIMAGE"
+    "MISC",
+    "QUAKE",
+    "RENDERER",
+    "TEX_IMAGE",
+    "HUNK_ALLOC"
 };
+
+// Tags updated on every alloc/free.
+unsigned int ps2_mem_tag_counts[MEMTAG_COUNT] = {0};
 
 //=============================================================================
 //
-// malloc/memalign hooks:
+// malloc/free hooks:
 //
 //=============================================================================
 
@@ -43,15 +48,14 @@ void * PS2_MemAlloc(int size_bytes, ps2_mem_tag_t tag)
         Sys_Error("Trying to allocate zero or negative size (%d)!", size_bytes);
     }
 
-    //TODO add tracking counters!
-    (void)tag;
-
     void * ptr = malloc(size_bytes);
     if (ptr == NULL)
     {
-        Sys_Error("Out-of-memory for tag %s!", mem_tag_names[tag]);
+        Sys_Error("Out-of-memory for tag %s! Failed to alloc %d bytes.",
+                  ps2_mem_tag_names[tag], size_bytes);
     }
 
+    ps2_mem_tag_counts[tag] += size_bytes;
     return ptr;
 }
 
@@ -60,29 +64,118 @@ void * PS2_MemAlloc(int size_bytes, ps2_mem_tag_t tag)
 PS2_MemFree
 ================
 */
-void PS2_MemFree(void * ptr, ps2_mem_tag_t tag)
+void PS2_MemFree(void * ptr, int size_bytes, ps2_mem_tag_t tag)
 {
     if (ptr == NULL)
     {
         return;
     }
 
-    //TODO add tracking counters!
-    (void)tag;
-
+    ps2_mem_tag_counts[tag] -= size_bytes;
     free(ptr);
 }
 
 /*
 ================
-PS2_AddRenderPacketMem
+PS2_FormatMemoryUnit
 ================
 */
-void PS2_AddRenderPacketMem(unsigned int size_bytes)
+const char * PS2_FormatMemoryUnit(unsigned int size_bytes, int abbreviated)
 {
-    // TODO so we can keep track of memory allocated
-    // externally by the SDK for render packets!
-    (void)size_bytes;
+    enum
+    {
+        KILOBYTE = 1024,
+        MEGABYTE = 1024 * KILOBYTE,
+        GIGABYTE = 1024 * MEGABYTE
+    };
+
+    const char * mem_unit_str;
+    float adjusted_size;
+
+    if (size_bytes < KILOBYTE)
+    {
+        mem_unit_str  = abbreviated ? "B" : "Bytes";
+        adjusted_size = (float)size_bytes;
+    }
+    else if (size_bytes < MEGABYTE)
+    {
+        mem_unit_str  = abbreviated ? "KB" : "Kilobytes";
+        adjusted_size = size_bytes / 1024.0f;
+    }
+    else if (size_bytes < GIGABYTE)
+    {
+        mem_unit_str  = abbreviated ? "MB" : "Megabytes";
+        adjusted_size = size_bytes / 1024.0f / 1024.0f;
+    }
+    else
+    {
+        mem_unit_str  = abbreviated ? "GB" : "Gigabytes";
+        adjusted_size = size_bytes / 1024.0f / 1024.0f / 1024.0f;
+    }
+
+    char * fmtbuf;
+    int chars_written;
+    char num_str_buf[100];
+
+    // Max chars reserved for the output string, max `num_str_buf + 28` chars for the unit str:
+    enum
+    {
+        MEM_UNIT_STR_MAXLEN = sizeof(num_str_buf) + 28
+    };
+    static int bufnum = 0;
+    static char local_str_buf[8][MEM_UNIT_STR_MAXLEN];
+
+    fmtbuf = local_str_buf[bufnum];
+    bufnum = (bufnum + 1) & 7;
+
+    // We only care about the first 2 decimal digs
+    chars_written = snprintf(num_str_buf, 100, "%.2f", adjusted_size);
+    if (chars_written <= 0)
+    {
+        fmtbuf[0] = '?';
+        fmtbuf[1] = '?';
+        fmtbuf[2] = '?';
+        fmtbuf[3] = '\0';
+        return fmtbuf; // Error return
+    }
+
+    // Remove trailing zeros if no significant decimal digits:
+    char * p = num_str_buf;
+    for (; *p; ++p)
+    {
+        if (*p == '.')
+        {
+            // Find the end of the string
+            while (*++p)
+            {
+            }
+
+            // Remove trailing zeros
+            while (*--p == '0')
+            {
+                *p = '\0';
+            }
+            // If the dot was left alone at the end, remove it too
+            if (*p == '.')
+            {
+                *p = '\0';
+            }
+            break;
+        }
+    }
+
+    // Consolidate the strings:
+    chars_written = snprintf(fmtbuf, MEM_UNIT_STR_MAXLEN, "%s %s", num_str_buf, mem_unit_str);
+    if (chars_written <= 0)
+    {
+        fmtbuf[0] = '?';
+        fmtbuf[1] = '?';
+        fmtbuf[2] = '?';
+        fmtbuf[3] = '\0';
+        return fmtbuf; // Error return
+    }
+
+    return fmtbuf;
 }
 
 //=============================================================================
@@ -148,7 +241,7 @@ void Hunk_Free(void * base)
 {
     if (base != NULL)
     {
-        PS2_MemFree(base, MEMTAG_HUNK_ALLOC);
+        PS2_MemFree(base, hunk_max_size, MEMTAG_HUNK_ALLOC);
     }
     --hunk_count;
 }

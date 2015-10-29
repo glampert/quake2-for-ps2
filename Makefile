@@ -25,9 +25,9 @@ SRC_FILES = \
 	ps2/ref_ps2.c \
 	ps2/tex_image.c \
 	ps2/math_funcs.c \
+	ps2/net_ps2.c \
 	ps2/main_ps2.c \
 	null/in_null.c \
-	null/net_null.c \
 	null/cd_null.c \
 	null/snddma_null.c \
 	common/cmd.c \

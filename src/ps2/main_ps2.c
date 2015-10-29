@@ -15,9 +15,12 @@
 //
 // TODO:
 //
-// - move main to a separate file (main_ps2.c)
-// - replace raw malloc calls so we can account for memory
+// - bring up the optimized asm math functions for the PS2 (on math_funcs.c)
+//
 // - Need to find this 'ps2mkisofs' to be able to make a proper PS2 ISO!!!
+//
+// - probably add a "welcome screen" right after load to display idSoftware
+//   copyright and maybe some self promoting as well ;)
 //
 
 //FIXME TEMP testing stuff
@@ -25,6 +28,35 @@
 extern refexport_t re;
 extern void Test_PS2_Draw2D(void);
 extern void Test_PS2_Cinematics(void);
+
+static const char * all_menu_names[] =
+{
+    "menu_main",
+    "menu_game",
+    "menu_loadgame",
+    "menu_savegame",
+    "menu_joinserver",
+    "menu_addressbook",
+    "menu_startserver",
+    "menu_dmoptions",
+    "menu_playerconfig",
+    "menu_downloadoptions",
+    "menu_credits",
+    "menu_multiplayer",
+    "menu_video",
+    "menu_options",
+    "menu_keys",
+    "menu_quit"
+};
+
+enum
+{
+    NUM_MENUS = sizeof(all_menu_names) / sizeof(all_menu_names[0]),
+    MENU_MSEC = 6 * 1000
+};
+
+static int next_menu = 0;
+static int time_til_next_menu = MENU_MSEC;
 
 /*
 ================
@@ -75,6 +107,8 @@ int main(void)
     char * argv[] = { "QPS2.ELF" };
     Qcommon_Init(argc, argv);
 
+    Cbuf_AddText((char *)all_menu_names[next_menu]);
+
     oldtime = Sys_Milliseconds();
     for (;;)
     {
@@ -87,6 +121,15 @@ int main(void)
 
         Qcommon_Frame(time);
         oldtime = newtime;
+
+        //TEST cycling all the menus
+        if (time_til_next_menu <= 0 && next_menu < NUM_MENUS)
+        {
+            Cbuf_AddText((char *)all_menu_names[next_menu++]);
+            time_til_next_menu = MENU_MSEC;
+        }
+        time_til_next_menu -= time;
+        //TEST cycling all the menus
     }
 #endif //0
 

@@ -16,7 +16,7 @@ is already implemented and working on both the emulator and the PS2, as you can 
 in the above screenshot of the in-game console running on the PS2.
 
 The long term goal is to have a fully functional and playable (single-player)
-Quake II on the PlayStation 2, relying only on the freely available tools and libraries.
+Quake II on the PlayStation 2, using only on the freely available tools and libraries.
 
 ## License
 
