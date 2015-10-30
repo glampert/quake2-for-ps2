@@ -244,16 +244,44 @@ SYSTEM SPECIFIC
 ==============================================================
 */
 
-extern int curtime; // time returned by last Sys_Milliseconds
+//
+// Large block stack allocation API
+//
+typedef struct
+{
+    byte * base_ptr;
+    int    max_size;
+    int    curr_size;
+} mem_hunk_t;
 
-int Sys_Milliseconds(void);
-void Sys_Mkdir(char * path);
+// Allocate/free a new hunk of memory (allocation is zero filled).
+void Hunk_New(mem_hunk_t * hunk, int max_size);
+void Hunk_Free(mem_hunk_t * hunk);
 
-// large block stack allocation routines
+// Fetch a new slice from the hunk's end.
+byte * Hunk_BlockAlloc(mem_hunk_t * hunk, int block_size);
+
+// Get the offset to the end of the allocated region.
+int Hunk_GetTail(mem_hunk_t * hunk);
+
+// LAMPERT 2015-10-30:
+// Original Hunk allocator API used by Quake2
+// relied on global data. We provide a cleaner
+// global-state-free replacement.
+/*
 void * Hunk_Begin(int maxsize);
 void * Hunk_Alloc(int size);
 void Hunk_Free(void * buf);
 int Hunk_End(void);
+*/
+
+//=============================================
+
+// time returned by last Sys_Milliseconds
+extern int curtime;
+
+int Sys_Milliseconds(void);
+void Sys_Mkdir(const char * path);
 
 // directory searching
 #define SFF_ARCH   0x01
@@ -265,7 +293,7 @@ int Hunk_End(void);
 /*
 ** pass in an attribute mask of things you wish to REJECT
 */
-char * Sys_FindFirst(char * path, unsigned musthave, unsigned canthave);
+char * Sys_FindFirst(const char * path, unsigned musthave, unsigned canthave);
 char * Sys_FindNext(unsigned musthave, unsigned canthave);
 void Sys_FindClose(void);
 

@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -69,10 +69,9 @@ gitem_t * GetItemByIndex(int index)
 /*
 ===============
 FindItemByClassname
-
 ===============
 */
-gitem_t * FindItemByClassname(char * classname)
+gitem_t * FindItemByClassname(const char * classname)
 {
     int i;
     gitem_t * it;
@@ -92,10 +91,9 @@ gitem_t * FindItemByClassname(char * classname)
 /*
 ===============
 FindItem
-
 ===============
 */
-gitem_t * FindItem(char * pickup_name)
+gitem_t * FindItem(const char * pickup_name)
 {
     int i;
     gitem_t * it;

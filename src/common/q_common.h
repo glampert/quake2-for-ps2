@@ -100,8 +100,8 @@ typedef struct sizebuf_s
 void SZ_Init(sizebuf_t * buf, byte * data, int length);
 void SZ_Clear(sizebuf_t * buf);
 void * SZ_GetSpace(sizebuf_t * buf, int length);
-void SZ_Write(sizebuf_t * buf, void * data, int length);
-void SZ_Print(sizebuf_t * buf, char * data); // strcats onto the sizebuf
+void SZ_Write(sizebuf_t * buf, const void * data, int length);
+void SZ_Print(sizebuf_t * buf, const char * data); // strcats onto the sizebuf
 
 //============================================================================
 
@@ -352,23 +352,26 @@ The game starts with a Cbuf_AddText ("exec quake.rc\n"); Cbuf_Execute ();
 
 */
 
-#define EXEC_NOW 0    // don't return until completed
-#define EXEC_INSERT 1 // insert at current position, but don't run yet
-#define EXEC_APPEND 2 // add to end of the command buffer
+typedef enum
+{
+    EXEC_NOW    = 0, // don't return until completed
+    EXEC_INSERT = 1, // insert at current position, but don't run yet
+    EXEC_APPEND = 2  // add to end of the command buffer
+} cmd_exec_when_t;
 
 void Cbuf_Init(void);
 // allocates an initial text buffer that will grow as needed
 
-void Cbuf_AddText(char * text);
+void Cbuf_AddText(const char * text);
 // as new commands are generated from the console or keybindings,
 // the text is added to the end of the command buffer.
 
-void Cbuf_InsertText(char * text);
+void Cbuf_InsertText(const char * text);
 // when a command wants to issue other commands immediately, the text is
 // inserted at the beginning of the buffer, before any remaining unexecuted
 // commands.
 
-void Cbuf_ExecuteText(int exec_when, char * text);
+void Cbuf_ExecuteText(cmd_exec_when_t exec_when, const char * text);
 // this can be used in place of either Cbuf_AddText or Cbuf_InsertText
 
 void Cbuf_AddEarlyCommands(qboolean clear);
@@ -403,33 +406,33 @@ typedef void (*xcommand_t)(void);
 
 void Cmd_Init(void);
 
-void Cmd_AddCommand(char * cmd_name, xcommand_t function);
+void Cmd_AddCommand(const char * cmd_name, xcommand_t function);
 // called by the init functions of other parts of the program to
 // register commands and functions to call for them.
 // The cmd_name is referenced later, so it should not be in temp memory
 // if function is NULL, the command will be forwarded to the server
 // as a clc_stringcmd instead of executed locally
-void Cmd_RemoveCommand(char * cmd_name);
+void Cmd_RemoveCommand(const char * cmd_name);
 
 qboolean Cmd_Exists(const char * cmd_name);
 // used by the cvar code to check for cvar / command name overlap
 
-char * Cmd_CompleteCommand(char * partial);
+const char * Cmd_CompleteCommand(const char * partial);
 // attempts to match a partial command for automatic command line completion
 // returns NULL if nothing fits
 
 int Cmd_Argc(void);
-char * Cmd_Argv(int arg);
-char * Cmd_Args(void);
+const char * Cmd_Argv(int arg);
+const char * Cmd_Args(void);
 // The functions that execute commands get their parameters with these
 // functions. Cmd_Argv () will return an empty string, not a NULL
 // if arg > argc, so string operations are always safe.
 
-void Cmd_TokenizeString(char * text, qboolean macroExpand);
+void Cmd_TokenizeString(const char * text, qboolean macroExpand);
 // Takes a null terminated string.  Does not need to be /n terminated.
 // breaks the string up into arg tokens.
 
-void Cmd_ExecuteString(char * text);
+void Cmd_ExecuteString(const char * text);
 // Parses a single line of text into arguments and tries to execute it
 // as if it was typed at the console
 

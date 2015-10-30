@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -29,7 +29,7 @@ void Svcmd_Test_f(void)
 ==============================================================================
 
 PACKET FILTERING
- 
+
 
 You can add or remove addresses from the filter list with:
 
@@ -62,17 +62,20 @@ typedef struct
     unsigned compare;
 } ipfilter_t;
 
-#define MAX_IPFILTERS 1024
+enum
+{
+    MAX_IPFILTERS = 1024
+};
 
-ipfilter_t ipfilters[MAX_IPFILTERS];
-int numipfilters;
+static ipfilter_t ipfilters[MAX_IPFILTERS];
+static int numipfilters;
 
 /*
 =================
 StringToFilter
 =================
 */
-static qboolean StringToFilter(char * s, ipfilter_t * f)
+static qboolean StringToFilter(const char * s, ipfilter_t * f)
 {
     char num[128];
     int i, j;
@@ -202,6 +205,7 @@ void SVCmd_RemoveIP_f(void)
         return;
 
     for (i = 0; i < numipfilters; i++)
+    {
         if (ipfilters[i].mask == f.mask && ipfilters[i].compare == f.compare)
         {
             for (j = i + 1; j < numipfilters; j++)
@@ -210,6 +214,7 @@ void SVCmd_RemoveIP_f(void)
             gi.cprintf(NULL, PRINT_HIGH, "Removed.\n");
             return;
         }
+    }
     gi.cprintf(NULL, PRINT_HIGH, "Didn't find %s.\n", gi.argv(2));
 }
 
@@ -282,7 +287,7 @@ of the parameters
 */
 void ServerCommand(void)
 {
-    char * cmd;
+    const char * cmd;
 
     cmd = gi.argv(1);
     if (Q_stricmp(cmd, "test") == 0)

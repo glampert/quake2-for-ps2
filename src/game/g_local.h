@@ -575,12 +575,13 @@ void Cmd_Score_f(edict_t * ent);
 //
 // g_items.c
 //
+#define ITEM_INDEX(x) ((x)-itemlist)
+gitem_t * FindItem(const char * pickup_name);
+gitem_t * FindItemByClassname(const char * classname);
+
 void PrecacheItem(gitem_t * it);
 void InitItems(void);
 void SetItemNames(void);
-gitem_t * FindItem(char * pickup_name);
-gitem_t * FindItemByClassname(char * classname);
-#define ITEM_INDEX(x) ((x)-itemlist)
 edict_t * Drop_Item(edict_t * ent, gitem_t * item);
 void SetRespawn(edict_t * ent, float delay);
 void ChangeWeapon(edict_t * ent);

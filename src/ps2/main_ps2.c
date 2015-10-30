@@ -107,7 +107,7 @@ int main(void)
     char * argv[] = { "QPS2.ELF" };
     Qcommon_Init(argc, argv);
 
-    Cbuf_AddText((char *)all_menu_names[next_menu]);
+    //Cbuf_AddText(all_menu_names[next_menu]);
 
     oldtime = Sys_Milliseconds();
     for (;;)
@@ -122,14 +122,16 @@ int main(void)
         Qcommon_Frame(time);
         oldtime = newtime;
 
+        /*
         //TEST cycling all the menus
         if (time_til_next_menu <= 0 && next_menu < NUM_MENUS)
         {
-            Cbuf_AddText((char *)all_menu_names[next_menu++]);
+            Cbuf_AddText(all_menu_names[next_menu++]);
             time_til_next_menu = MENU_MSEC;
         }
         time_til_next_menu -= time;
         //TEST cycling all the menus
+        */
     }
 #endif //0
 

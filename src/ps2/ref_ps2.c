@@ -11,6 +11,7 @@
  * ================================================================================================ */
 
 #include "ps2/ref_ps2.h"
+#include "ps2/model.h"
 #include "ps2/mem_alloc.h"
 
 // PS2DEV SDK:
@@ -149,6 +150,8 @@ extern void Sys_Error(const char * error, ...);
 /*
 ================
 PS2_VRamAlloc
+
+Remarks: Local function.
 ================
 */
 static int PS2_VRamAlloc(int width, int height, int psm, int alignment)
@@ -168,6 +171,8 @@ static int PS2_VRamAlloc(int width, int height, int psm, int alignment)
 /*
 ================
 PS2_InitGSBuffers
+
+Remarks: Local function.
 ================
 */
 static void PS2_InitGSBuffers(int vidMode, int fbPsm, int zPsm, qboolean interlaced)
@@ -244,6 +249,8 @@ static void PS2_InitGSBuffers(int vidMode, int fbPsm, int zPsm, qboolean interla
 /*
 ================
 PS2_InitDrawingEnvironment
+
+Remarks: Local function.
 ================
 */
 static void PS2_InitDrawingEnvironment(void)
@@ -276,6 +283,8 @@ static void PS2_InitDrawingEnvironment(void)
 /*
 ================
 PS2_ClearScreen
+
+Remarks: Local function.
 ================
 */
 static void PS2_ClearScreen(void)
@@ -302,6 +311,8 @@ static void PS2_ClearScreen(void)
 /*
 ================
 PS2_Draw2DBegin
+
+Remarks: Local function.
 ================
 */
 static void PS2_Draw2DBegin(void)
@@ -319,6 +330,8 @@ static void PS2_Draw2DBegin(void)
 /*
 ================
 PS2_Draw2DEnd
+
+Remarks: Local function.
 ================
 */
 static void PS2_Draw2DEnd(void)
@@ -335,6 +348,8 @@ static void PS2_Draw2DEnd(void)
 /*
 ================
 PS2_FlushPipeline
+
+Remarks: Local function.
 ================
 */
 static void PS2_FlushPipeline(void)
@@ -360,6 +375,8 @@ static void PS2_FlushPipeline(void)
 /*
 ================
 PS2_Draw2DAddToPacket
+
+Remarks: Local function.
 ================
 */
 enum elem2d_type
@@ -444,12 +461,13 @@ static qword_t * PS2_Draw2DAddToPacket(qword_t * qwptr, const screen_quad_t * qu
 /*
 ================
 PS2_Draw2DTexChange
+
+Only called by PS2_SortAndDraw2DElements.
+Remarks: Local function.
 ================
 */
 static void PS2_Draw2DTexChange(u32 tex_index)
 {
-    // This is only called by PS2_SortAndDraw2DElements.
-
     if (tex_index > MAX_TEXIMAGES)
     {
         Sys_Error("PS2_Draw2DTexChange: Invalid tex_index %d!!!", (int)tex_index);
@@ -482,6 +500,9 @@ static void PS2_Draw2DTexChange(u32 tex_index)
 /*
 ================
 PS2_Draw2DBatchSortPredicate
+
+Passed as callback to qsort().
+Remarks: Local function.
 ================
 */
 static int PS2_Draw2DBatchSortPredicate(const void * a, const void * b)
@@ -505,6 +526,8 @@ static int PS2_Draw2DBatchSortPredicate(const void * a, const void * b)
 /*
 ================
 PS2_SortAndDraw2DElements
+
+Remarks: Local function.
 ================
 */
 static void PS2_SortAndDraw2DElements(screen_quad_t * batch, int batch_size)
@@ -556,6 +579,8 @@ static void PS2_SortAndDraw2DElements(screen_quad_t * batch, int batch_size)
 /*
 ================
 PS2_Flush2DBatch
+
+Remarks: Local function.
 ================
 */
 static void PS2_Flush2DBatch(void)
@@ -620,6 +645,8 @@ static void PS2_Flush2DBatch(void)
 /*
 ================
 PS2_DrawFullScreenCinematic
+
+Remarks: Local function.
 ================
 */
 static void PS2_DrawFullScreenCinematic(void)
@@ -664,6 +691,8 @@ static void PS2_DrawFullScreenCinematic(void)
 /*
 ================
 PS2_DrawFPSCounter
+
+Remarks: Local function.
 ================
 */
 static void PS2_DrawFPSCounter(void)
@@ -701,6 +730,8 @@ static void PS2_DrawFPSCounter(void)
 /*
 ================
 PS2_DrawMemTags
+
+Remarks: Local function.
 ================
 */
 static void PS2_DrawMemTags(void)
@@ -846,6 +877,9 @@ qboolean PS2_RendererInit(void * unused1, void * unused2)
     // And reserve a texture slot for the cinematic frame.
     cinematic_frame.teximage = PS2_TexImageAlloc();
 
+    // 3D mesh rendering setup:
+    PS2_ModelInit();
+
     Com_DPrintf("---- PS2_RendererInit completed! ( %d, %d ) ----\n", viddef.width, viddef.height);
     ps2ref.initialized = true;
     return true;
@@ -907,6 +941,7 @@ void PS2_RendererShutdown(void)
         packet_free(ps2ref.flip_fb_packet);
     }
 
+    PS2_ModelShutdown();
     PS2_TexImageShutdown();
     PS2_MemClearObj(&ps2ref);
 }
@@ -1330,7 +1365,7 @@ void PS2_DrawString(int x, int y, const char * s)
         x += GLYPH_SIZE;
         if (*s == '\n')
         {
-            y += GLYPH_SIZE + 2;
+            y += GLYPH_SIZE + 2; // 2 pixels of spacing between lines.
             x = initial_x;
         }
         ++s;
@@ -1351,7 +1386,7 @@ void PS2_DrawAltString(int x, int y, const char * s)
         x += GLYPH_SIZE;
         if (*s == '\n')
         {
-            y += GLYPH_SIZE + 2;
+            y += GLYPH_SIZE + 2; // 2 pixels of spacing between lines.
             x = initial_x;
         }
         ++s;

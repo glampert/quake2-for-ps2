@@ -27,6 +27,10 @@ unsigned sys_frame_time;
 
 //=============================================================================
 
+void Sys_Init(void)
+{
+}
+
 void Sys_Error(const char * error, ...)
 {
     va_list argptr;
@@ -80,6 +84,33 @@ char * Sys_GetClipboardData(void)
     return NULL;
 }
 
+int Sys_Milliseconds(void)
+{
+    return 0;
+}
+
+void Sys_Mkdir(const char * path)
+{
+}
+
+char * Sys_FindFirst(const char * path, unsigned musthave, unsigned canthave)
+{
+    return NULL;
+}
+
+char * Sys_FindNext(unsigned musthave, unsigned canthave)
+{
+    return NULL;
+}
+
+void Sys_FindClose(void)
+{
+}
+
+//=============================================================================
+
+// Old Quake2 Hunk alloc API, now replaced.
+/*
 void * Hunk_Begin(int maxsize)
 {
     return NULL;
@@ -98,39 +129,11 @@ int Hunk_End(void)
 {
     return 0;
 }
-
-int Sys_Milliseconds(void)
-{
-    return 0;
-}
-
-void Sys_Mkdir(char * path)
-{
-}
-
-char * Sys_FindFirst(char * path, unsigned musthave, unsigned canthave)
-{
-    return NULL;
-}
-
-char * Sys_FindNext(unsigned musthave, unsigned canthave)
-{
-    return NULL;
-}
-
-void Sys_FindClose(void)
-{
-}
-
-void Sys_Init(void)
-{
-}
+*/
 
 //=============================================================================
-//
-// QPS2-Null:
-//
-//=============================================================================
+
+#ifdef PS2_QUAKE
 
 // This is missing on the PS2
 struct tm * localtime(const time_t * timep)
@@ -145,9 +148,12 @@ int rename(const char * a, const char * b)
     return -1;
 }
 
+#endif // PS2_QUAKE
+
+//=============================================================================
+
 int main(/*int argc, char ** argv*/)
 {
-    // PS2 main() takes no arguments.
     int argc = 1;
     char * argv[] = { "NULL_SYS" };
     Qcommon_Init(argc, argv);

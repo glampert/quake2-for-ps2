@@ -165,7 +165,8 @@ keyname_t keynames[] =
 
 void CompleteCommand(void)
 {
-    char *cmd, *s;
+    const char * cmd;
+    const char * s;
 
     s = key_lines[edit_line] + 1;
     if (*s == '\\' || *s == '/')

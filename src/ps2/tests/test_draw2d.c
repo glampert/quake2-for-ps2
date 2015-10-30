@@ -20,7 +20,7 @@ void Test_PS2_Cinematics(void);
 
 //=============================================================================
 //
-// Scrap_AllocBlock tests:
+// Img_ScrapAlloc tests:
 //
 //=============================================================================
 
@@ -55,10 +55,10 @@ static byte * CheckerPattern(byte color0, byte color1, int size, byte * buffer)
 static void InitTestScraps(void)
 {
     // Color values are indexed into the global_palette.
-    scrap_tex_0 = Scrap_AllocBlock(CheckerPattern(50,  65,  24, scrap_test_0), 24, 24, "scrap_test_0");
-    scrap_tex_1 = Scrap_AllocBlock(CheckerPattern(70,  85,  32, scrap_test_1), 32, 32, "scrap_test_1");
-    scrap_tex_2 = Scrap_AllocBlock(CheckerPattern(90,  110, 64, scrap_test_2), 64, 64, "scrap_test_2");
-    scrap_tex_3 = Scrap_AllocBlock(CheckerPattern(150, 210, 16, scrap_test_3), 16, 16, "scrap_test_3");
+    scrap_tex_0 = Img_ScrapAlloc(CheckerPattern(50,  65,  24, scrap_test_0), 24, 24, "scrap_test_0");
+    scrap_tex_1 = Img_ScrapAlloc(CheckerPattern(70,  85,  32, scrap_test_1), 32, 32, "scrap_test_1");
+    scrap_tex_2 = Img_ScrapAlloc(CheckerPattern(90,  110, 64, scrap_test_2), 64, 64, "scrap_test_2");
+    scrap_tex_3 = Img_ScrapAlloc(CheckerPattern(150, 210, 16, scrap_test_3), 16, 16, "scrap_test_3");
 
     if (scrap_tex_0 == NULL) { Sys_Error("scrap_tex_0 not allocated!"); }
     if (scrap_tex_1 == NULL) { Sys_Error("scrap_tex_1 not allocated!"); }

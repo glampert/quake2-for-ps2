@@ -128,7 +128,7 @@ extern ps2_teximage_t * builtin_tex_debug;
 /*
 ==============================================================
 
-PS2 renderer API functions:
+PS2 renderer API functions (ref_ps2.c):
 
 ==============================================================
 */
@@ -181,11 +181,19 @@ void PS2_DrawFill(int x, int y, int w, int h, int c);
 void PS2_DrawFadeScreen(void);
 
 /*
- * Miscellaneous:
+ * refexport_t miscellaneous:
  */
 
 void PS2_CinematicSetPalette(const byte * restrict palette);
 void PS2_AppActivate(qboolean activate);
+
+/*
+==============================================================
+
+Textures and image loading from file (tex_image.c):
+
+==============================================================
+*/
 
 /*
  * PS2 Texture image setup/management:
@@ -219,11 +227,16 @@ qboolean TGA_LoadFromFile(const char * filename, byte ** pic,
  * Convert from 8bit palettized to RGB[A]:
  */
 
-void Img_UnPalettize32(int width, int height, const byte * restrict pic8in, // Palettized 8bits to RGBA 32bits.
+// Palettized 8bits to RGBA 32bits.
+void Img_UnPalettize32(int width, int height, const byte * restrict pic8in,
                        const u32 * restrict palette, byte * restrict pic32out);
-void Img_UnPalettize24(int width, int height, const byte * restrict pic8in, // Palettized 8bits to RGB 24bits.
+
+// Palettized 8bits to RGB 24bits.
+void Img_UnPalettize24(int width, int height, const byte * restrict pic8in,
                        const u32 * restrict palette, byte * restrict pic24out);
-void Img_UnPalettize16(int width, int height, const byte * restrict pic8in, // Palettized 8bits to RGBA 16bits (1-5-5-5).
+
+// Palettized 8bits to RGBA 16bits (1-5-5-5).
+void Img_UnPalettize16(int width, int height, const byte * restrict pic8in,
                        const u32 * restrict palette, byte * restrict pic16out);
 
 /*
@@ -232,7 +245,7 @@ void Img_UnPalettize16(int width, int height, const byte * restrict pic8in, // P
 
 // Scrap texture atlas allocation. This is based on the same atlas used by ref_gl.
 // Returns null if the atlas is full, a unique ps2_teximage_t handle referencing the atlas otherwise.
-ps2_teximage_t * Scrap_AllocBlock(const byte * pic8in, int w, int h, const char * pic_name);
+ps2_teximage_t * Img_ScrapAlloc(const byte * pic8in, int w, int h, const char * pic_name);
 
 // Resize the input RGBA image using a box filter. Output and input must point to different buffers.
 void Img_Resample32(const u32 * restrict in_img, int in_width, int in_height,

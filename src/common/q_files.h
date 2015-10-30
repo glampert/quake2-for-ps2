@@ -35,7 +35,8 @@ The .pak files are just a linear collapse of a directory tree
 typedef struct
 {
     char name[56];
-    int filepos, filelen;
+    int filepos;
+    int filelen;
 } dpackfile_t;
 
 typedef struct
@@ -82,10 +83,10 @@ typedef struct
 #define ALIAS_VERSION 8
 
 #define MAX_TRIANGLES 4096
-#define MAX_VERTS 2048
-#define MAX_FRAMES 512
-#define MAX_MD2SKINS 32
-#define MAX_SKINNAME 64
+#define MAX_VERTS     2048
+#define MAX_FRAMES    512
+#define MAX_MD2SKINS  32
+#define MAX_SKINNAME  64
 
 typedef struct
 {
@@ -105,10 +106,10 @@ typedef struct
     byte lightnormalindex;
 } dtrivertx_t;
 
-#define DTRIVERTX_V0 0
-#define DTRIVERTX_V1 1
-#define DTRIVERTX_V2 2
-#define DTRIVERTX_LNI 3
+#define DTRIVERTX_V0   0
+#define DTRIVERTX_V1   1
+#define DTRIVERTX_V2   2
+#define DTRIVERTX_LNI  3
 #define DTRIVERTX_SIZE 4
 
 typedef struct
@@ -134,11 +135,11 @@ typedef struct
 
     int skinwidth;
     int skinheight;
-    int framesize; // byte size of each frame
+    int framesize;  // byte size of each frame
 
     int num_skins;
     int num_xyz;
-    int num_st; // greater than num_xyz for seams
+    int num_st;     // greater than num_xyz for seams
     int num_tris;
     int num_glcmds; // dwords in strip/fan command list
     int num_frames;
@@ -148,8 +149,7 @@ typedef struct
     int ofs_tris;   // offset for dtriangles
     int ofs_frames; // offset for first frame
     int ofs_glcmds;
-    int ofs_end; // end of file
-
+    int ofs_end;    // end of file
 } dmdl_t;
 
 /*
@@ -212,30 +212,29 @@ typedef struct miptex_s
 
 // upper design bounds
 // leaffaces, leafbrushes, planes, and verts are still bounded by 16 bit short limits
-#define MAX_MAP_MODELS 1024
-#define MAX_MAP_BRUSHES 8192
-#define MAX_MAP_ENTITIES 2048
-#define MAX_MAP_ENTSTRING 0x40000
-#define MAX_MAP_TEXINFO 8192
-
-#define MAX_MAP_AREAS 256
+#define MAX_MAP_MODELS      1024
+#define MAX_MAP_BRUSHES     8192
+#define MAX_MAP_ENTITIES    2048
+#define MAX_MAP_ENTSTRING   0x40000
+#define MAX_MAP_TEXINFO     8192
+#define MAX_MAP_AREAS       256
 #define MAX_MAP_AREAPORTALS 1024
-#define MAX_MAP_PLANES 65536
-#define MAX_MAP_NODES 65536
-#define MAX_MAP_BRUSHSIDES 65536
-#define MAX_MAP_LEAFS 65536
-#define MAX_MAP_VERTS 65536
-#define MAX_MAP_FACES 65536
-#define MAX_MAP_LEAFFACES 65536
+#define MAX_MAP_PLANES      65536
+#define MAX_MAP_NODES       65536
+#define MAX_MAP_BRUSHSIDES  65536
+#define MAX_MAP_LEAFS       65536
+#define MAX_MAP_VERTS       65536
+#define MAX_MAP_FACES       65536
+#define MAX_MAP_LEAFFACES   65536
 #define MAX_MAP_LEAFBRUSHES 65536
-#define MAX_MAP_PORTALS 65536
-#define MAX_MAP_EDGES 128000
-#define MAX_MAP_SURFEDGES 256000
-#define MAX_MAP_LIGHTING 0x200000
-#define MAX_MAP_VISIBILITY 0x100000
+#define MAX_MAP_PORTALS     65536
+#define MAX_MAP_EDGES       128000
+#define MAX_MAP_SURFEDGES   256000
+#define MAX_MAP_LIGHTING    0x200000
+#define MAX_MAP_VISIBILITY  0x100000
 
 // key / value pair sizes
-#define MAX_KEY 32
+#define MAX_KEY   32
 #define MAX_VALUE 1024
 
 //=============================================================================
@@ -246,26 +245,26 @@ typedef struct
     int filelen;
 } lump_t;
 
-#define LUMP_ENTITIES 0
-#define LUMP_PLANES 1
-#define LUMP_VERTEXES 2
-#define LUMP_VISIBILITY 3
-#define LUMP_NODES 4
-#define LUMP_TEXINFO 5
-#define LUMP_FACES 6
-#define LUMP_LIGHTING 7
-#define LUMP_LEAFS 8
-#define LUMP_LEAFFACES 9
+#define LUMP_ENTITIES    0
+#define LUMP_PLANES      1
+#define LUMP_VERTEXES    2
+#define LUMP_VISIBILITY  3
+#define LUMP_NODES       4
+#define LUMP_TEXINFO     5
+#define LUMP_FACES       6
+#define LUMP_LIGHTING    7
+#define LUMP_LEAFS       8
+#define LUMP_LEAFFACES   9
 #define LUMP_LEAFBRUSHES 10
-#define LUMP_EDGES 11
-#define LUMP_SURFEDGES 12
-#define LUMP_MODELS 13
-#define LUMP_BRUSHES 14
-#define LUMP_BRUSHSIDES 15
-#define LUMP_POP 16
-#define LUMP_AREAS 17
+#define LUMP_EDGES       11
+#define LUMP_SURFEDGES   12
+#define LUMP_MODELS      13
+#define LUMP_BRUSHES     14
+#define LUMP_BRUSHSIDES  15
+#define LUMP_POP         16
+#define LUMP_AREAS       17
 #define LUMP_AREAPORTALS 18
-#define HEADER_LUMPS 19
+#define HEADER_LUMPS     19
 
 typedef struct
 {
@@ -314,49 +313,49 @@ typedef struct
 // these definitions also need to be in q_shared.h!
 
 // lower bits are stronger, and will eat weaker brushes completely
-#define CONTENTS_SOLID 1  // an eye is never valid in a solid
-#define CONTENTS_WINDOW 2 // translucent, but not watery
-#define CONTENTS_AUX 4
-#define CONTENTS_LAVA 8
-#define CONTENTS_SLIME 16
-#define CONTENTS_WATER 32
-#define CONTENTS_MIST 64
+#define CONTENTS_SOLID        1 // an eye is never valid in a solid
+#define CONTENTS_WINDOW       2 // translucent, but not watery
+#define CONTENTS_AUX          4
+#define CONTENTS_LAVA         8
+#define CONTENTS_SLIME        16
+#define CONTENTS_WATER        32
+#define CONTENTS_MIST         64
 #define LAST_VISIBLE_CONTENTS 64
 
 // remaining contents are non-visible, and don't eat brushes
-#define CONTENTS_AREAPORTAL 0x8000
-#define CONTENTS_PLAYERCLIP 0x10000
-#define CONTENTS_MONSTERCLIP 0x20000
+#define CONTENTS_AREAPORTAL   0x8000
+#define CONTENTS_PLAYERCLIP   0x10000
+#define CONTENTS_MONSTERCLIP  0x20000
 
 // currents can be added to any other contents, and may be mixed
-#define CONTENTS_CURRENT_0 0x40000
-#define CONTENTS_CURRENT_90 0x80000
-#define CONTENTS_CURRENT_180 0x100000
-#define CONTENTS_CURRENT_270 0x200000
-#define CONTENTS_CURRENT_UP 0x400000
+#define CONTENTS_CURRENT_0    0x40000
+#define CONTENTS_CURRENT_90   0x80000
+#define CONTENTS_CURRENT_180  0x100000
+#define CONTENTS_CURRENT_270  0x200000
+#define CONTENTS_CURRENT_UP   0x400000
 #define CONTENTS_CURRENT_DOWN 0x800000
 
-#define CONTENTS_ORIGIN 0x1000000  // removed before bsping an entity
-#define CONTENTS_MONSTER 0x2000000 // should never be on a brush, only in game
-#define CONTENTS_DEADMONSTER 0x4000000
-#define CONTENTS_DETAIL 0x8000000       // brushes to be added after vis leafs
-#define CONTENTS_TRANSLUCENT 0x10000000 // auto set if any surface has trans
-#define CONTENTS_LADDER 0x20000000
+#define CONTENTS_ORIGIN       0x1000000  // removed before bsping an entity
+#define CONTENTS_MONSTER      0x2000000  // should never be on a brush, only in game
+#define CONTENTS_DEADMONSTER  0x4000000
+#define CONTENTS_DETAIL       0x8000000  // brushes to be added after vis leafs
+#define CONTENTS_TRANSLUCENT  0x10000000 // auto set if any surface has trans
+#define CONTENTS_LADDER       0x20000000
 
-#define SURF_LIGHT 0x1 // value will hold the light strength
-#define SURF_SLICK 0x2 // effects game physics
-#define SURF_SKY 0x4   // don't draw, but add to skybox
-#define SURF_WARP 0x8  // turbulent water warp
-#define SURF_TRANS33 0x10
-#define SURF_TRANS66 0x20
-#define SURF_FLOWING 0x40 // scroll towards angle
-#define SURF_NODRAW 0x80  // don't bother referencing the texture
+#define SURF_LIGHT            0x1  // value will hold the light strength
+#define SURF_SLICK            0x2  // effects game physics
+#define SURF_SKY              0x4  // don't draw, but add to skybox
+#define SURF_WARP             0x8  // turbulent water warp
+#define SURF_TRANS33          0x10
+#define SURF_TRANS66          0x20
+#define SURF_FLOWING          0x40 // scroll towards angle
+#define SURF_NODRAW           0x80 // don't bother referencing the texture
 
 typedef struct
 {
     int planenum;
     int children[2]; // negative numbers are -(leafs+1), not nodes
-    short mins[3];   // for frustom culling
+    short mins[3];   // for frustum culling
     short maxs[3];
     unsigned short firstface;
     unsigned short numfaces; // counting both sides
@@ -424,7 +423,7 @@ typedef struct
     int contents;
 } dbrush_t;
 
-#define ANGLE_UP -1
+#define ANGLE_UP   -1
 #define ANGLE_DOWN -2
 
 // the visibility lump consists of a header with a count, then

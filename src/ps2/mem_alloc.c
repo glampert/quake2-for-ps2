@@ -11,6 +11,8 @@
  * ================================================================================================ */
 
 #include "ps2/mem_alloc.h"
+#include "game/q_shared.h" // For mem_hunk_t
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -180,56 +182,21 @@ const char * PS2_FormatMemoryUnit(unsigned int size_bytes, int abbreviated)
 
 //=============================================================================
 //
-// Hunk memory allocator (similar to a stack), used by the Game and FS:
+// Hunk memory allocator (similar to a stack), used by the Game and Renderer:
 //
 //=============================================================================
 
-static int hunk_count       = 0;
-static int hunk_max_size    = 0;
-static int hunk_curr_size   = 0;
-static char * hunk_mem_base = NULL;
-
 /*
 ================
-Hunk_Begin
+Hunk_New
 ================
 */
-void * Hunk_Begin(int maxsize)
+void Hunk_New(mem_hunk_t * hunk, int max_size)
 {
-    hunk_curr_size = 0;
-    hunk_max_size  = maxsize;
-    hunk_mem_base  = PS2_MemAlloc(maxsize, MEMTAG_HUNK_ALLOC);
-    memset(hunk_mem_base, 0, maxsize);
-    return hunk_mem_base;
-}
-
-/*
-================
-Hunk_End
-================
-*/
-int Hunk_End(void)
-{
-    ++hunk_count;
-    return hunk_curr_size;
-}
-
-/*
-================
-Hunk_Alloc
-================
-*/
-void * Hunk_Alloc(int size)
-{
-    size = (size + 31) & ~31; // round to cacheline
-
-    hunk_curr_size += size;
-    if (hunk_curr_size > hunk_max_size)
-    {
-        Sys_Error("Hunk_Alloc: Overflowed!");
-    }
-
-    return hunk_mem_base + hunk_curr_size - size;
+    hunk->curr_size = 0;
+    hunk->max_size  = max_size;
+    hunk->base_ptr  = PS2_MemAlloc(max_size, MEMTAG_HUNK_ALLOC);
+    memset(hunk->base_ptr, 0, max_size);
 }
 
 /*
@@ -237,11 +204,41 @@ void * Hunk_Alloc(int size)
 Hunk_Free
 ================
 */
-void Hunk_Free(void * base)
+void Hunk_Free(mem_hunk_t * hunk)
 {
-    if (base != NULL)
+    if (hunk->base_ptr != NULL)
     {
-        PS2_MemFree(base, hunk_max_size, MEMTAG_HUNK_ALLOC);
+        PS2_MemFree(hunk->base_ptr, hunk->max_size, MEMTAG_HUNK_ALLOC);
+        PS2_MemClearObj(hunk);
     }
-    --hunk_count;
+}
+
+/*
+================
+Hunk_BlockAlloc
+================
+*/
+byte * Hunk_BlockAlloc(mem_hunk_t * hunk, int block_size)
+{
+    // This is the way Quake2 does it, so I ain't changing it...
+    block_size = (block_size + 31) & ~31; // round to cacheline
+
+    // The hunk stack doesn't resize.
+    hunk->curr_size += block_size;
+    if (hunk->curr_size > hunk->max_size)
+    {
+        Sys_Error("Hunk_BlockAlloc: Overflowed with %d bytes request!", block_size);
+    }
+
+    return hunk->base_ptr + hunk->curr_size - block_size;
+}
+
+/*
+================
+Hunk_GetTail
+================
+*/
+int Hunk_GetTail(mem_hunk_t * hunk)
+{
+    return hunk->curr_size;
 }

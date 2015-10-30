@@ -77,9 +77,15 @@ ps2_teximage_t * builtin_tex_debug     = NULL;
 #define RGBA16(r, g, b, a) \
     ((((a) & 0x1) << 15) | (((b) >> 3) << 10) | (((g) >> 3) << 5) | ((r) >> 3))
 
+// Used for image name hashing.
+extern u32 Sys_HashString(const char * str);
+
 /*
 ==============
 CheckerPattern
+
+Makes a checker pattern texture for builtin_tex_debug.
+Remarks: Local function.
 ==============
 */
 enum
@@ -167,6 +173,8 @@ void PS2_TexImageShutdown(void)
     //TODO cleanup all allocated textures on ps2ref.teximages!!
     //remember we can't free the debug tex since it is generated!!!
     //teximages with type IT_BUILTIN can't be freed
+
+    ps2ref.num_teximages = 0;
 }
 
 /*
@@ -178,7 +186,7 @@ ps2_teximage_t * PS2_TexImageAlloc(void)
 {
     if (ps2ref.num_teximages == MAX_TEXIMAGES)
     {
-        Sys_Error("Out of tex images!!!");
+        Sys_Error("Out of tex image objects!!!");
     }
 
     //TODO assume always sequential, or allow empty gaps???
@@ -188,17 +196,23 @@ ps2_teximage_t * PS2_TexImageAlloc(void)
 
 /*
 ==============
-Local helpers:
-- IsPowerOfTwo
-- RoundToPowerOfTwo
+IsPowerOfTwo
+
+Remarks: Local function.
 ==============
 */
-
 static inline int IsPowerOfTwo(int x)
 {
     return (x > 0) && (x & (x - 1)) == 0;
 }
 
+/*
+==============
+RoundToPowerOfTwo
+
+Remarks: Local function.
+==============
+*/
 static inline int RoundToPowerOfTwo(int x)
 {
     if (IsPowerOfTwo(x))
@@ -207,18 +221,21 @@ static inline int RoundToPowerOfTwo(int x)
     }
 
     // Round nearest:
-    int k;
+    int k, p2;
     for (k = sizeof(int) * 8 - 1; ((1 << k) & x) == 0; --k)
     {
     }
 
     if (((1 << (k - 1)) & x) == 0)
     {
-        return 1 << k;
+        p2 = 1 << k;
+    }
+    else
+    {
+        p2 = 1 << (k + 1);
     }
 
-    int pot = 1 << (k + 1);
-    return (pot < MAX_TEXIMAGE_SIZE) ? pot : MAX_TEXIMAGE_SIZE;
+    return (p2 < MAX_TEXIMAGE_SIZE) ? p2 : MAX_TEXIMAGE_SIZE;
 
     // Round down:
     /*
@@ -230,10 +247,12 @@ static inline int RoundToPowerOfTwo(int x)
 
 /*
 ==============
-PS2_Common8BitTexSetup
+Common8BitTexSetup
+
+Remarks: Local function.
 ==============
 */
-static ps2_teximage_t * PS2_Common8BitTexSetup(const byte * pic8, int width, int height, const char * name, int flags)
+static ps2_teximage_t * Common8BitTexSetup(const byte * pic8, int width, int height, const char * name, int flags)
 {
     byte * expanded_pic;
     byte * scaled_pic;
@@ -319,10 +338,12 @@ static ps2_teximage_t * PS2_Common8BitTexSetup(const byte * pic8, int width, int
 
 /*
 ==============
-PS2_LoadPcxImpl
+LoadPcxImpl
+
+Remarks: Local function.
 ==============
 */
-static ps2_teximage_t * PS2_LoadPcxImpl(const char * name, int flags)
+static ps2_teximage_t * LoadPcxImpl(const char * name, int flags)
 {
     int width;
     int height;
@@ -344,13 +365,13 @@ static ps2_teximage_t * PS2_LoadPcxImpl(const char * name, int flags)
         // a descent way on allocation, so I've change the atlas
         // allocation criteria here to allow it's height, so it
         // will not be a standalone image and won't require a resize.
-        teximage = Scrap_AllocBlock(pic8, width, height, name);
+        teximage = Img_ScrapAlloc(pic8, width, height, name);
     }
 
     // Atlas full or image too big, create a standalone texture:
     if (teximage == NULL)
     {
-        teximage = PS2_Common8BitTexSetup(pic8, width, height, name, flags);
+        teximage = Common8BitTexSetup(pic8, width, height, name, flags);
     }
 
     // The palettized image is no longer needed.
@@ -360,10 +381,12 @@ static ps2_teximage_t * PS2_LoadPcxImpl(const char * name, int flags)
 
 /*
 ==============
-PS2_LoadWalImpl
+LoadWalImpl
+
+Remarks: Local function.
 ==============
 */
-static ps2_teximage_t * PS2_LoadWalImpl(const char * name, int flags)
+static ps2_teximage_t * LoadWalImpl(const char * name, int flags)
 {
     ps2_teximage_t * teximage;
     const miptex_t * wall;
@@ -385,7 +408,7 @@ static ps2_teximage_t * PS2_LoadWalImpl(const char * name, int flags)
     offset = LittleLong(wall->offsets[0]);
     pic8   = (const byte *)wall + offset;
 
-    teximage = PS2_Common8BitTexSetup(pic8, width, height, name, flags | IT_WALL);
+    teximage = Common8BitTexSetup(pic8, width, height, name, flags | IT_WALL);
 
     FS_FreeFile((void *)wall);
     return teximage;
@@ -393,10 +416,12 @@ static ps2_teximage_t * PS2_LoadWalImpl(const char * name, int flags)
 
 /*
 ==============
-PS2_LoadTgaImpl
+LoadTgaImpl
+
+Remarks: Local function.
 ==============
 */
-static ps2_teximage_t * PS2_LoadTgaImpl(const char * name, int flags)
+static ps2_teximage_t * LoadTgaImpl(const char * name, int flags)
 {
     byte * pic32;
     int width;
@@ -413,10 +438,10 @@ static ps2_teximage_t * PS2_LoadTgaImpl(const char * name, int flags)
     const int img_type = flags & (~IT_BUILTIN);
 
     // TGA defaults:
-    const int psm         = GS_PSM_32;
-    const int format      = TEXTURE_COMPONENTS_RGBA;
-    const int mag_filter  = LOD_MAG_LINEAR;
-    const int min_filter  = LOD_MIN_LINEAR;
+    const int psm        = GS_PSM_32;
+    const int format     = TEXTURE_COMPONENTS_RGBA;
+    const int mag_filter = LOD_MAG_LINEAR;
+    const int min_filter = LOD_MIN_LINEAR;
 
     //
     // TGAs are always expanded to RGBA, so no extra conversion is needed.
@@ -434,52 +459,28 @@ static ps2_teximage_t * PS2_LoadTgaImpl(const char * name, int flags)
 
 /*
 ==============
-PS2_ImageNameHash
+FindImageImpl
 
-OAT - One-At-a-Time hash of the filename of an image.
-https://en.wikipedia.org/wiki/Jenkins_hash_function
+Remarks: Local function.
 ==============
 */
-static inline u32 PS2_ImageNameHash(const char * name)
+static ps2_teximage_t * FindImageImpl(const char * name, int flags)
 {
-    u32 hash = 0;
-
-    while (*name != '\0')
+    if (name == NULL || *name == '\0')
     {
-        hash += *name++;
-        hash += (hash << 10);
-        hash ^= (hash >> 6);
-    }
-
-    hash += (hash << 3);
-    hash ^= (hash >> 11);
-    hash += (hash << 15);
-
-    return hash;
-}
-
-/*
-==============
-PS2_FindImageImpl
-==============
-*/
-static ps2_teximage_t * PS2_FindImageImpl(const char * name, int flags)
-{
-    if (name == NULL)
-    {
-        Com_DPrintf("PS2_FindImageImpl: Null name!\n");
+        Com_DPrintf("FindImage: Null/empty image name!\n");
         return NULL;
     }
 
     const u32 name_len = strlen(name);
     if (name_len < 5 || name_len >= MAX_QPATH)
     {
-        Com_DPrintf("PS2_FindImageImpl: Bad image name: '%s'\n", name);
+        Com_DPrintf("FindImage: Bad image name length: '%s'\n", name);
         return NULL;
     }
 
     // Compare by hash code, much cheaper.
-    const u32 name_hash = PS2_ImageNameHash(name);
+    const u32 name_hash = Sys_HashString(name);
 
     //
     // First, lookup our cache:
@@ -501,17 +502,17 @@ static ps2_teximage_t * PS2_FindImageImpl(const char * name, int flags)
     //
     if (strcmp(name + name_len - 4, ".pcx") == 0)
     {
-        return PS2_LoadPcxImpl(name, flags);
+        return LoadPcxImpl(name, flags);
     }
 
     if (strcmp(name + name_len - 4, ".wal") == 0)
     {
-        return PS2_LoadWalImpl(name, flags);
+        return LoadWalImpl(name, flags);
     }
 
     if (strcmp(name + name_len - 4, ".tga") == 0)
     {
-        return PS2_LoadTgaImpl(name, flags);
+        return LoadTgaImpl(name, flags);
     }
 
     Com_DPrintf("WARNING: Unable to find image '%s'\n", name);
@@ -536,17 +537,17 @@ ps2_teximage_t * PS2_TexImageFindOrLoad(const char * name, int flags)
         if (name[0] != '/' && name[0] != '\\')
         {
             Com_sprintf(fullname, sizeof(fullname), "pics/%s.pcx", name);
-            teximage = PS2_FindImageImpl(fullname, flags);
+            teximage = FindImageImpl(fullname, flags);
         }
         else
         {
-            teximage = PS2_FindImageImpl(name + 1, flags);
+            teximage = FindImageImpl(name + 1, flags);
         }
     }
     else
     {
         // Skins, walls, etc.
-        teximage = PS2_FindImageImpl(name, flags);
+        teximage = FindImageImpl(name, flags);
     }
 
     return teximage;
@@ -594,7 +595,7 @@ void PS2_TexImageSetup(ps2_teximage_t * teximage, const char * name, int w, int 
 
     // Finally, copy and hash the name string:
     strncpy(teximage->name, name, MAX_QPATH);
-    teximage->hash = PS2_ImageNameHash(name);
+    teximage->hash = Sys_HashString(name);
 }
 
 /*
@@ -689,24 +690,20 @@ void Img_Resample32(const u32 * restrict in_img, int in_width, int in_height,
     }
 }
 
-//=============================================================================
-//
-// Scrap allocation - AKA texture atlas
-// Useful to group small textures into a larger one,
-// reducing the number of texture switches when rendering.
-//
-//=============================================================================
-
-static int scrap_allocated[MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
-static u32 scrap_pixels[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
-
 /*
 ==============
-Scrap_AllocBlock
+Img_ScrapAlloc
+
+Scrap allocation - AKA texture atlas.
+Useful to group small textures into a larger one,
+reducing the number of texture switches when rendering.
 ==============
 */
-ps2_teximage_t * Scrap_AllocBlock(const byte * pic8in, int w, int h, const char * pic_name)
+ps2_teximage_t * Img_ScrapAlloc(const byte * pic8in, int w, int h, const char * pic_name)
 {
+    static int scrap_allocated[MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
+    static u32 scrap_pixels[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
+
     int i, j, k;
     int sx, sy;
     int best, best2;

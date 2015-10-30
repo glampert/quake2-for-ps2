@@ -8,7 +8,7 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the GNU General Public License for more details.
 
@@ -150,7 +150,7 @@ Give items to a client
 */
 void Cmd_Give_f(edict_t * ent)
 {
-    char * name;
+    const char * name;
     gitem_t * it;
     int index;
     int i;
@@ -392,7 +392,7 @@ void Cmd_Use_f(edict_t * ent)
 {
     int index;
     gitem_t * it;
-    char * s;
+    const char * s;
 
     s = gi.args();
     it = FindItem(s);
@@ -427,7 +427,7 @@ void Cmd_Drop_f(edict_t * ent)
 {
     int index;
     gitem_t * it;
-    char * s;
+    const char * s;
 
     s = gi.args();
     it = FindItem(s);
@@ -780,7 +780,7 @@ void Cmd_Say_f(edict_t * ent, qboolean team, qboolean arg0)
 {
     int i, j;
     edict_t * other;
-    char * p;
+    const char * p;
     char text[2048];
     gclient_t * cl;
 
@@ -805,12 +805,15 @@ void Cmd_Say_f(edict_t * ent, qboolean team, qboolean arg0)
     {
         p = gi.args();
 
-        if (*p == '"')
+        if (*p == '"') // Copy ignoring quotes
         {
             p++;
-            p[strlen(p) - 1] = 0;
+            strncat(text, p, strlen(p) - 1);
         }
-        strcat(text, p);
+        else
+        {
+            strcat(text, p);
+        }
     }
 
     // don't let text be too long for malicious reasons
@@ -903,7 +906,7 @@ ClientCommand
 */
 void ClientCommand(edict_t * ent)
 {
-    char * cmd;
+    const char * cmd;
 
     if (!ent->client)
         return; // not fully in game yet

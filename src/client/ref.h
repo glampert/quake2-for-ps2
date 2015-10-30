@@ -23,26 +23,25 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "common/q_common.h"
 
-#define REF_API_VERSION 3
+#define REF_API_VERSION       3
+#define ENTITY_FLAGS          68
+#define POWERSUIT_SCALE       4.0f
 
-#define MAX_DLIGHTS 32
-#define MAX_ENTITIES 128
-#define MAX_PARTICLES 4096
-#define MAX_LIGHTSTYLES 256
+#define MAX_DLIGHTS           32
+#define MAX_ENTITIES          128
+#define MAX_LIGHTSTYLES       256
+#define MAX_PARTICLES         4096
 
-#define ENTITY_FLAGS 68
-#define POWERSUIT_SCALE 4.0f
-
-#define SHELL_RED_COLOR 0xF2
-#define SHELL_GREEN_COLOR 0xD0
-#define SHELL_BLUE_COLOR 0xF3
-#define SHELL_RG_COLOR 0xDC
-#define SHELL_RB_COLOR 0x68
-#define SHELL_BG_COLOR 0x78
-#define SHELL_DOUBLE_COLOR 0xDF // 223
-#define SHELL_HALF_DAM_COLOR 0x90
-#define SHELL_CYAN_COLOR 0x72
-#define SHELL_WHITE_COLOR 0xD7
+#define SHELL_RED_COLOR       0xF2
+#define SHELL_GREEN_COLOR     0xD0
+#define SHELL_BLUE_COLOR      0xF3
+#define SHELL_RG_COLOR        0xDC
+#define SHELL_RB_COLOR        0x68
+#define SHELL_BG_COLOR        0x78
+#define SHELL_DOUBLE_COLOR    0xDF // 223
+#define SHELL_HALF_DAM_COLOR  0x90
+#define SHELL_CYAN_COLOR      0x72
+#define SHELL_WHITE_COLOR     0xD7
 
 //=============================================================================
 //
@@ -78,7 +77,6 @@ typedef struct entity_s
 
     struct image_s * skin; // NULL for inline skin
     int flags;
-
 } entity_t;
 
 typedef struct
@@ -155,7 +153,7 @@ typedef struct
     // are flood filled to eliminate mip map edge errors, and pics have
     // an implicit "pics/" prepended to the name. (a pic name that starts with a
     // slash will not use the "pics/" prefix or the ".pcx" postfix)
-    void (*BeginRegistration)(const char * map);
+    void (*BeginRegistration)(const char * map_name);
     struct model_s * (*RegisterModel)(const char * name);
     struct image_s * (*RegisterSkin)(const char * name);
     struct image_s * (*RegisterPic)(const char * name);
@@ -197,31 +195,32 @@ typedef struct
     void (*Sys_Error)(int err_level, const char * str, ...);
     void (*Con_Printf)(int print_level, const char * str, ...);
 
-    void (*Cmd_AddCommand)(char * name, void (*cmd)(void));
-    void (*Cmd_RemoveCommand)(char * name);
+    void (*Cmd_AddCommand)(const char * name, void (*cmd)(void));
+    void (*Cmd_RemoveCommand)(const char * name);
+    void (*Cmd_ExecuteText)(cmd_exec_when_t exec_when, const char * text);
+
     int (*Cmd_Argc)(void);
-    char * (*Cmd_Argv)(int i);
-    void (*Cmd_ExecuteText)(int exec_when, char * text);
+    const char * (*Cmd_Argv)(int i);
 
     // files will be memory mapped read only
     // the returned buffer may be part of a larger pak file,
     // or a discrete file from anywhere in the quake search path
     // a -1 return means the file does not exist
     // NULL can be passed for buf to just determine existance
-    int (*FS_LoadFile)(char * name, void ** buf);
+    int (*FS_LoadFile)(const char * name, void ** buf);
     void (*FS_FreeFile)(void * buf);
 
     // gamedir will be the current directory that generated
     // files should be stored to, ie: "f:\quake\id1"
     char * (*FS_Gamedir)(void);
 
-    cvar_t * (*Cvar_Get)(char * name, char * value, int flags);
-    cvar_t * (*Cvar_Set)(char * name, char * value);
-    void (*Cvar_SetValue)(char * name, float value);
+    cvar_t * (*Cvar_Get)(const char * name, const char * value, int flags);
+    cvar_t * (*Cvar_Set)(const char * name, const char * value);
+    void (*Cvar_SetValue)(const char * name, float value);
 
-    qboolean (*Vid_GetModeInfo)(int * width, int * height, int mode);
     void (*Vid_MenuInit)(void);
     void (*Vid_NewWindow)(int width, int height);
+    qboolean (*Vid_GetModeInfo)(int * width, int * height, int mode);
 
 } refimport_t;
 

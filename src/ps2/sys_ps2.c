@@ -330,6 +330,32 @@ char * Sys_GetClipboardData(void)
     return NULL; // Not available on PS2
 }
 
+/*
+==============
+Sys_HashString
+
+OAT - One-At-a-Time hash of the input string.
+See: https://en.wikipedia.org/wiki/Jenkins_hash_function
+==============
+*/
+u32 Sys_HashString(const char * str)
+{
+    u32 hash = 0;
+
+    while (*str != '\0')
+    {
+        hash += *str++;
+        hash += (hash << 10);
+        hash ^= (hash >> 6);
+    }
+
+    hash += (hash << 3);
+    hash ^= (hash >> 11);
+    hash += (hash << 15);
+
+    return hash;
+}
+
 //=============================================================================
 //
 // Misc file system utilities:
@@ -339,6 +365,8 @@ char * Sys_GetClipboardData(void)
 /*
 ================
 Sys_LoadBinaryFile
+
+Remarks: Uses the fio PS2DEV SDK API.
 ================
 */
 qboolean Sys_LoadBinaryFile(const char * filename, int * size_bytes, void ** data_ptr)
@@ -402,7 +430,7 @@ BAIL:
 Sys_Mkdir
 ================
 */
-void Sys_Mkdir(char * path)
+void Sys_Mkdir(const char * path)
 {
     (void)path;
     // Not available on PS2
@@ -413,7 +441,7 @@ void Sys_Mkdir(char * path)
 Sys_FindFirst
 ================
 */
-char * Sys_FindFirst(char * path, unsigned musthave, unsigned canthave)
+char * Sys_FindFirst(const char * path, unsigned musthave, unsigned canthave)
 {
     (void)path;
     (void)musthave;
@@ -445,7 +473,7 @@ void Sys_FindClose(void)
 
 //=============================================================================
 //
-// Fix C-library gaps in the PlayStation-2:
+// Fix C-library gaps on the PlayStation-2:
 //
 //=============================================================================
 

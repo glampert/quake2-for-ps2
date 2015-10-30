@@ -223,7 +223,7 @@ void Master_Packet(void);
 // sv_init.c
 //
 void SV_InitGame(void);
-void SV_Map(qboolean attractloop, char * levelstring, qboolean loadgame);
+void SV_Map(qboolean attractloop, const char * levelstring, qboolean loadgame);
 
 //
 // sv_phys.c

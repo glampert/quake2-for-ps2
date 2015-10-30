@@ -95,7 +95,7 @@ qboolean SV_SetPlayer(void)
     client_t * cl;
     int i;
     int idnum;
-    char * s;
+    const char * s;
 
     if (Cmd_Argc() < 2)
         return false;
@@ -154,7 +154,7 @@ SV_WipeSavegame
 Delete save/<XXX>/
 =====================
 */
-void SV_WipeSavegame(char * savename)
+void SV_WipeSavegame(const char * savename)
 {
     char name[MAX_OSPATH];
     char * s;
@@ -224,7 +224,7 @@ void CopyFile(char * src, char * dst)
 SV_CopySaveGame
 ================
 */
-void SV_CopySaveGame(char * src, char * dst)
+void SV_CopySaveGame(const char * src, const char * dst)
 {
     char name[MAX_OSPATH], name2[MAX_OSPATH];
     int l, len;
@@ -483,7 +483,7 @@ goes to map jail.bsp.
 */
 void SV_GameMap_f(void)
 {
-    char * map;
+    const char * map;
     int i;
     client_t * cl;
     qboolean * savedInuse;
@@ -555,7 +555,7 @@ For development work
 */
 void SV_Map_f(void)
 {
-    char * map;
+    const char * map;
     char expanded[MAX_QPATH];
 
     // if not a pcx, demo, or cinematic, check to make sure the level exists
@@ -593,7 +593,7 @@ void SV_Loadgame_f(void)
 {
     char name[MAX_OSPATH];
     FILE * f;
-    char * dir;
+    const char * dir;
 
     if (Cmd_Argc() != 2)
     {
@@ -636,7 +636,7 @@ SV_Savegame_f
 */
 void SV_Savegame_f(void)
 {
-    char * dir;
+    const char * dir;
 
     if (sv.state != ss_game)
     {
@@ -790,7 +790,7 @@ void SV_ConSay_f(void)
 {
     client_t * client;
     int j;
-    char * p;
+    const char * p;
     char text[1024];
 
     if (Cmd_Argc() < 2)
@@ -799,18 +799,22 @@ void SV_ConSay_f(void)
     strcpy(text, "console: ");
     p = Cmd_Args();
 
+    // Strip leading/trailing quotes:
     if (*p == '"')
     {
-        p++;
-        p[strlen(p) - 1] = 0;
+        ++p; // skip the first
+        strncat(text, p, strlen(p) - 1); // copy all except the last char (")
     }
-
-    strcat(text, p);
+    else
+    {
+        strcat(text, p);
+    }
 
     for (j = 0, client = svs.clients; j < maxclients->value; j++, client++)
     {
         if (client->state != cs_spawned)
             continue;
+
         SV_ClientPrintf(client, PRINT_CHAT, "%s\n", text);
     }
 }

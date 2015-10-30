@@ -24,6 +24,7 @@ SRC_FILES = \
 	ps2/vid_ps2.c \
 	ps2/ref_ps2.c \
 	ps2/tex_image.c \
+	ps2/model.c \
 	ps2/math_funcs.c \
 	ps2/net_ps2.c \
 	ps2/main_ps2.c \
