@@ -27,12 +27,13 @@ ps2_refresh_t       ps2ref  __attribute__((aligned(16))) = {0};
 ps2_perf_counters_t perfcnt __attribute__((aligned(16))) = {0};
 
 // Config vars:
-static cvar_t * r_ps2_vid_width      = NULL;
-static cvar_t * r_ps2_vid_height     = NULL;
-static cvar_t * r_ps2_ui_brightness  = NULL;
-static cvar_t * r_ps2_fade_scr_alpha = NULL;
-static cvar_t * r_ps2_show_fps       = NULL;
-static cvar_t * r_ps2_show_mem_tags  = NULL;
+static cvar_t * r_ps2_vid_width         = NULL;
+static cvar_t * r_ps2_vid_height        = NULL;
+static cvar_t * r_ps2_ui_brightness     = NULL;
+static cvar_t * r_ps2_fade_scr_alpha    = NULL;
+static cvar_t * r_ps2_show_fps          = NULL;
+static cvar_t * r_ps2_show_mem_tags     = NULL;
+static cvar_t * r_ps2_show_render_stats = NULL;
 
 // Average multiple frames together to smooth changes out a bit.
 enum { MAX_FPS_HIST = 4 };
@@ -692,6 +693,7 @@ static void PS2_DrawFullScreenCinematic(void)
 ================
 PS2_DrawFPSCounter
 
+Frames-Per-Second counter at the top-right corner of the screen.
 Remarks: Local function.
 ================
 */
@@ -727,35 +729,93 @@ static void PS2_DrawFPSCounter(void)
     PS2_DrawString(viddef.width - 60, 6, va("FPS %u", fps.fps_count));
 }
 
+//===============================================
+
+// Pretty hackish, but we need to share 'em with PS2_DrawMemTags/PS2_DrawRenderStats...
+static int draw_stats_curr_y  = 0;
+static int draw_stats_old_y   = 0;
+static int draw_stats_start_y = 35;
+
+static inline void Stats_Print(const char * str)
+{
+    PS2_DrawString(viddef.width - 170, draw_stats_curr_y, str);
+    draw_stats_curr_y += 12;
+}
+
+static inline void Stats_DrawBackground(void)
+{
+    PS2_DrawFill(viddef.width - 180, draw_stats_old_y - 5,
+                 viddef.width - 10, draw_stats_curr_y - draw_stats_old_y + 5, 2);
+}
+
+//===============================================
+
 /*
 ================
 PS2_DrawMemTags
 
+Prints current allocation totals for the memory tags.
 Remarks: Local function.
 ================
 */
 static void PS2_DrawMemTags(void)
 {
-    int i;
-    int y = 35;
-    u32 total = 0;
+    draw_stats_old_y = draw_stats_curr_y;
 
+    int i;
+    u32 total = 0;
     for (i = 0; i < MEMTAG_COUNT; ++i)
     {
-        total += ps2_mem_tag_counts[i];
-
-        const char * count_str = PS2_FormatMemoryUnit(ps2_mem_tag_counts[i], true);
-        const char * formatted_str = va("%-10s %s", ps2_mem_tag_names[i], count_str);
-
-        PS2_DrawString(viddef.width - 170, y, formatted_str);
-        y += 12;
+        total += ps2_mem_tag_counts[i].total_bytes;
+        const char * count_str = PS2_FormatMemoryUnit(ps2_mem_tag_counts[i].total_bytes, true);
+        Stats_Print(va("%-10s %s", ps2_mem_tag_names[i], count_str));
     }
 
     // Total memory currently allocated (approximately):
-    PS2_DrawString(viddef.width - 170, y + 6, va("TOTAL: %s", PS2_FormatMemoryUnit(total, true)));
+    draw_stats_curr_y += 5;
+    Stats_Print(va("TOTAL: %s", PS2_FormatMemoryUnit(total, true)));
 
     // A darker background to give the text more contrast.
-    PS2_DrawFill(viddef.width - 180, 30, viddef.width - 10, 85, 2);
+    Stats_DrawBackground();
+}
+
+/*
+================
+PS2_DrawRenderStats
+
+Displays miscellaneous debug stats about the renderer and texture and model managers.
+Remarks: Local function.
+================
+*/
+static void PS2_DrawRenderStats(void)
+{
+    extern int ps2_model_pool_used;
+    extern int ps2_model_cache_hits;
+    extern int ps2_unused_models_freed;
+    extern int ps2_inline_models_used;
+    extern int ps2_models_failed;
+
+    extern int ps2_teximages_used;
+    extern int ps2_teximage_cache_hits;
+    extern int ps2_unused_teximages_freed;
+    extern int ps2_teximages_failed;
+
+    draw_stats_old_y = draw_stats_curr_y;
+    Stats_Print("--------------------");
+
+    Stats_Print(va("MDL loaded     %d", ps2_model_pool_used));
+    Stats_Print(va("MDL inline     %d", ps2_inline_models_used));
+    Stats_Print(va("MDL cache hit  %d", ps2_model_cache_hits));
+    Stats_Print(va("MDL freed      %d", ps2_unused_models_freed));
+    Stats_Print(va("MDL failed     %d", ps2_models_failed));
+
+    Stats_Print(va("TEX loaded     %d", ps2_teximages_used));
+    Stats_Print(va("TEX cache hits %d", ps2_teximage_cache_hits));
+    Stats_Print(va("TEX freed      %d", ps2_unused_teximages_freed));
+    Stats_Print(va("TEX failed     %d", ps2_teximages_failed));
+
+    // A darker background to give the text more contrast.
+    Stats_DrawBackground();
 }
 
 //=============================================================================
@@ -772,27 +832,29 @@ PS2_RendererInit
 qboolean PS2_RendererInit(void * unused1, void * unused2)
 {
     // These were used by the original GL renderer
-    // to pass the HWIND and GLRC Windows handles.
+    // to pass the HWND and GLRC Windows handles.
     (void)unused1;
     (void)unused2;
 
     Com_DPrintf("---- PS2_RendererInit ----\n");
 
     // These can be set from a config file:
-    r_ps2_vid_width       = Cvar_Get("r_ps2_vid_width",  va("%d", DEFAULT_VID_WIDTH),  0);
-    r_ps2_vid_height      = Cvar_Get("r_ps2_vid_height", va("%d", DEFAULT_VID_HEIGHT), 0);
-    r_ps2_ui_brightness   = Cvar_Get("r_ps2_ui_brightness",  "128", 0);
-    r_ps2_fade_scr_alpha  = Cvar_Get("r_ps2_fade_scr_alpha", "100", 0);
-    r_ps2_show_fps        = Cvar_Get("r_ps2_show_fps",       "1",   0);
-    r_ps2_show_mem_tags   = Cvar_Get("r_ps2_show_mem_tags",  "1",   0);
+    r_ps2_vid_width         = Cvar_Get("r_ps2_vid_width",  va("%d", DEFAULT_VID_WIDTH),  0);
+    r_ps2_vid_height        = Cvar_Get("r_ps2_vid_height", va("%d", DEFAULT_VID_HEIGHT), 0);
+    r_ps2_ui_brightness     = Cvar_Get("r_ps2_ui_brightness",     "128", 0);
+    r_ps2_fade_scr_alpha    = Cvar_Get("r_ps2_fade_scr_alpha",    "100", 0);
+    r_ps2_show_fps          = Cvar_Get("r_ps2_show_fps",          "1",   0);
+    r_ps2_show_mem_tags     = Cvar_Get("r_ps2_show_mem_tags",     "1",   0);
+    r_ps2_show_render_stats = Cvar_Get("r_ps2_show_render_stats", "1",   0);
 
     // Cache these, since on the PS2 we don't have a way of interacting with the console.
-    viddef.width          = (int)r_ps2_vid_width->value;
-    viddef.height         = (int)r_ps2_vid_height->value;
-    ps2ref.ui_brightness  = (u32)r_ps2_ui_brightness->value;
-    ps2ref.fade_scr_alpha = (u32)r_ps2_fade_scr_alpha->value;
-    ps2ref.show_fps_count = (qboolean)r_ps2_show_fps->value;
-    ps2ref.show_mem_tags  = (qboolean)r_ps2_show_mem_tags->value;
+    viddef.width             = (int)r_ps2_vid_width->value;
+    viddef.height            = (int)r_ps2_vid_height->value;
+    ps2ref.ui_brightness     = (u32)r_ps2_ui_brightness->value;
+    ps2ref.fade_scr_alpha    = (u32)r_ps2_fade_scr_alpha->value;
+    ps2ref.show_fps_count    = (qboolean)r_ps2_show_fps->value;
+    ps2ref.show_mem_tags     = (qboolean)r_ps2_show_mem_tags->value;
+    ps2ref.show_render_stats = (qboolean)r_ps2_show_render_stats->value;
 
     // Renderer id. Used in a couple places by the game.
     vidref_val = VIDREF_OTHER;
@@ -834,14 +896,15 @@ qboolean PS2_RendererInit(void * unused1, void * unused2)
 
     // Plus the five packet_ts just allocated above.
     renderer_packet_mem += sizeof(packet_t) * 5;
-    ps2_mem_tag_counts[MEMTAG_RENDERER] += renderer_packet_mem;
+    PS2_TagsAddRenderPacketMem(renderer_packet_mem);
 
     // Reset these, to be sure...
-    ps2ref.current_frame_packet = NULL;
-    ps2ref.current_frame_qwptr  = NULL;
-    ps2ref.dmatag_draw2d        = NULL;
-    ps2ref.current_tex          = NULL;
-    ps2ref.frame_index          = 0;
+    ps2ref.registration_sequence = 0;
+    ps2ref.current_frame_packet  = NULL;
+    ps2ref.current_frame_qwptr   = NULL;
+    ps2ref.dmatag_draw2d         = NULL;
+    ps2ref.current_tex           = NULL;
+    ps2ref.frame_index           = 0;
     memset(&fps, 0, sizeof(fps));
 
     // Init other aux data and default render states:
@@ -953,8 +1016,36 @@ PS2_BeginRegistration
 */
 void PS2_BeginRegistration(const char * map_name)
 {
+    extern int ps2_teximage_cache_hits;
+    extern int ps2_unused_teximages_freed;
+    extern int ps2_teximages_failed;
+
     Com_DPrintf("*** PS2_BeginRegistration: '%s' ***\n", map_name);
-    //TODO
+
+    ps2_teximage_cache_hits    = 0;
+    ps2_unused_teximages_freed = 0;
+    ps2_teximages_failed       = 0;
+
+    ps2ref.registration_started = true;
+    ps2ref.registration_sequence++;
+
+    PS2_ModelLoadWorld(map_name);
+}
+
+/*
+================
+PS2_EndRegistration
+================
+*/
+void PS2_EndRegistration(void)
+{
+    Com_DPrintf("*** PS2_EndRegistration ***\n");
+
+    // Let go what was not referenced by the current registration sequence.
+    PS2_ModelFreeUnused();
+    PS2_TexImageFreeUnused();
+
+    ps2ref.registration_started = false;
 }
 
 /*
@@ -964,9 +1055,7 @@ PS2_RegisterModel
 */
 struct model_s * PS2_RegisterModel(const char * name)
 {
-    //TODO
-    static int dummy1;
-    return (struct model_s *)&dummy1;
+    return (struct model_s *)PS2_ModelFindOrLoad(name, MDL_BRUSH | MDL_SPRITE | MDL_ALIAS);
 }
 
 /*
@@ -976,7 +1065,7 @@ PS2_RegisterSkin
 */
 struct image_s * PS2_RegisterSkin(const char * name)
 {
-    return (struct image_s *)PS2_TexImageFindOrLoad(name, IT_SKIN);
+    return (struct image_s *)PS2_TexImageFindOrLoad(name, IT_SKIN | IT_BUILTIN);
 }
 
 /*
@@ -996,23 +1085,13 @@ PS2_SetSky
 */
 void PS2_SetSky(const char * name, float rotate, vec3_t axis)
 {
-    Com_DPrintf("PS2_SetSky: '%s'\n", name);
     //TODO
     //
     // Looking at ref_gl, it seems that the renderer can decide
     // between using TGA or PCX for the skyboxes. TGA should be
     // a good choice for the PS2.
-}
-
-/*
-================
-PS2_EndRegistration
-================
-*/
-void PS2_EndRegistration(void)
-{
-    Com_DPrintf("*** PS2_EndRegistration ***\n");
-    //TODO
+    //
+    Com_DPrintf("PS2_SetSky: '%s'\n", name);
 }
 
 /*
@@ -1066,6 +1145,8 @@ void PS2_EndFrame(void)
     PS2_Draw2DBegin();
     PS2_DrawFullScreenCinematic();
 
+    draw_stats_curr_y = draw_stats_start_y;
+
     // Extra debug overlays:
     if (ps2ref.show_fps_count)
     {
@@ -1074,6 +1155,10 @@ void PS2_EndFrame(void)
     if (ps2ref.show_mem_tags)
     {
         PS2_DrawMemTags();
+    }
+    if (ps2ref.show_render_stats)
+    {
+        PS2_DrawRenderStats();
     }
 
     PS2_Flush2DBatch();

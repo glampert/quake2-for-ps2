@@ -47,12 +47,13 @@ enum
 // These can be ORed for image search criteria.
 typedef enum
 {
-    IT_SKIN    = (1 << 1),
-    IT_SPRITE  = (1 << 2),
-    IT_WALL    = (1 << 3),
-    IT_SKY     = (1 << 4),
-    IT_PIC     = (1 << 5),
-    IT_BUILTIN = (1 << 6)
+    IT_NULL    = 0,                            // Uninitialized image. Used internally.
+    IT_SKIN    = (1 << 1),                     // Usually PCX.
+    IT_SPRITE  = (1 << 2),                     // Usually PCX.
+    IT_WALL    = (1 << 3),                     // Custom WALL format (miptex_t).
+    IT_SKY     = (1 << 4),                     // PCX or TGA.
+    IT_PIC     = (1 << 5),                     // Usually PCX.
+    IT_BUILTIN = (1 << 6)                      // Our hardcoded built-ins. Points to static memory.
 } ps2_imagetype_t;
 
 // A texture or 2D image:
@@ -67,6 +68,7 @@ typedef struct
     u16             u0, v0;                    // Offsets into the scrap if this is allocate from the scrap, zero otherwise.
     u16             u1, v1;                    // If not zero, this is a scrap image. In such case, use these instead of w&h.
     texbuffer_t     texbuf;                    // GS texture buffer info from libdraw.
+    u32             registration_sequence;     // Registration num, so we know if it is currently referenced by the level being played.
     u32             hash;                      // Hash of the following string, for faster lookup.
     char            name[MAX_QPATH];           // Name or id. If from a file, game path including extension.
 } ps2_teximage_t;
@@ -77,7 +79,10 @@ typedef struct
     qboolean         initialized;              // Flag to keep track of initialization of our global ps2ref.
     qboolean         show_fps_count;           // Draws a frames per sec counter in the top-right corner of the screen.
     qboolean         show_mem_tags;            // Draws a debug overlay with the current values of the memory tags.
+    qboolean         show_render_stats;        // Display a debug overlay with other miscellaneous renderer stats.
     qboolean         frame_started;            // Set by BeginFrame, cleared at EndFrame. Some calls must be in between.
+    qboolean         registration_started;     // Set when between BeginRegistration/EndRegistration.
+    u32              registration_sequence;    // Bumped each BeginRegistration. Any loaded model/image not matching it is freed on EndRegistration.
     zbuffer_t        z_buffer;                 // PS2 depth buffer information.
     framebuffer_t    frame_buffers[2];         // PS2 color framebuffers (double buffered).
     packet_t *       frame_packets[2];         // Big packets for all the drawings in a frame.
@@ -94,7 +99,6 @@ typedef struct
     u32              frame_index;              // Index of the current frame buffer.
     u32              vram_used_bytes;          // Bytes of VRam currently committed.
     u32              vram_texture_start;       // Start of VRam after screen buffers where we can alloc textures.
-    u32              num_teximages;            // Total textures used in the teximages array.
     ps2_teximage_t * current_tex;              // Pointer to the current game texture in VRam (points to teximages[]).
     ps2_teximage_t   teximages[MAX_TEXIMAGES]; // All the textures used by a game level must fit in here!
 } ps2_refresh_t;
@@ -201,8 +205,9 @@ Textures and image loading from file (tex_image.c):
 
 void PS2_TexImageInit(void);
 void PS2_TexImageShutdown(void);
+void PS2_TexImageFreeUnused(void);
 
-ps2_teximage_t * PS2_TexImageAlloc(void);
+ps2_teximage_t * PS2_TexImageAlloc(void); // Sys_Error if depleted.
 ps2_teximage_t * PS2_TexImageFindOrLoad(const char * name, int flags);
 
 void PS2_TexImageVRamUpload(ps2_teximage_t * teximage);
@@ -235,7 +240,7 @@ void Img_UnPalettize32(int width, int height, const byte * restrict pic8in,
 void Img_UnPalettize24(int width, int height, const byte * restrict pic8in,
                        const u32 * restrict palette, byte * restrict pic24out);
 
-// Palettized 8bits to RGBA 16bits (1-5-5-5).
+// Palettized 8bits to RGBA 16bits (5-5-5-1).
 void Img_UnPalettize16(int width, int height, const byte * restrict pic8in,
                        const u32 * restrict palette, byte * restrict pic16out);
 

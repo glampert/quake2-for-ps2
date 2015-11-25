@@ -252,10 +252,11 @@ typedef struct
     byte * base_ptr;
     int    max_size;
     int    curr_size;
+    int    mem_tag;
 } mem_hunk_t;
 
 // Allocate/free a new hunk of memory (allocation is zero filled).
-void Hunk_New(mem_hunk_t * hunk, int max_size);
+void Hunk_New(mem_hunk_t * hunk, int max_size, int mem_tag);
 void Hunk_Free(mem_hunk_t * hunk);
 
 // Fetch a new slice from the hunk's end.

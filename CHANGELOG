@@ -23,3 +23,6 @@
   src/ps2/ directory. Changes made in the Quake2 source to account for the
   PlayStation2 are clearly marked as such.
 
+- Changed the Hunk_Alloc API so that it returns a user struct.
+  This removed the need for additional global state.
+

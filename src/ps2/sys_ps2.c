@@ -24,6 +24,9 @@
 // ref_ps2.c
 extern void PS2_RendererShutdown(void);
 
+// mem_alloc.c
+extern void PS2_TagsAddExecutableMem(unsigned int size_bytes);
+
 // The program code and static data will use a fair slice of
 // the main memory at all times. This is a rough estimate of that.
 enum
@@ -87,7 +90,7 @@ void Sys_Init(void)
 
     // Add our estimate of the amount of memory used to allocate
     // the program executable and all the prog data:
-    ps2_mem_tag_counts[MEMTAG_MISC] += (PROG_MEGABYTES * 1024 * 1024);
+    PS2_TagsAddExecutableMem(PROG_MEGABYTES * 1024 * 1024);
 }
 
 /*

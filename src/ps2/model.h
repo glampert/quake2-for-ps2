@@ -5,7 +5,7 @@
  * Author: Guilherme R. Lampert
  * Created on: 29/10/15
  * Brief: Declarations related to 3D model loading and handling for entities and world/level.
- *        Structured found here were mostly adapted from 'ref_gl/gl_model.h'
+ *        Structures found here were mostly adapted from 'ref_gl/gl_model.h'
  *
  * This source code is released under the GNU GPL v2 license.
  * Check the accompanying LICENSE file for details.
@@ -30,8 +30,14 @@ enum
     SURF_DRAWBACKGROUND = 64,
     SURF_UNDERWATER     = 128,
 
-    // Number of element in the poly vertex.
-    POLY_VERTEX_SIZE    = 7
+    // Number of elements in the poly vertex.
+    POLY_VERTEX_SIZE    = 7,
+
+    // Max height in pixels of MD2 skins.
+    // This was the original size limit of Quake2,
+    // but we can't load textures larger than 256,
+    // so anything bigger will get downscaled anyway.
+    MAX_MDL_SKIN_HEIGHT = 480
 };
 
 /*
@@ -184,9 +190,10 @@ typedef struct ps2_mdl_leaf_s
  */
 typedef enum
 {
-    MDL_BRUSH  = (1 << 1),
-    MDL_SPRITE = (1 << 2),
-    MDL_ENTITY = (1 << 3)
+    MDL_NULL   = 0,        // Uninitialized model. Used internally.
+    MDL_BRUSH  = (1 << 1), // World geometry.
+    MDL_SPRITE = (1 << 2), // Sprites.
+    MDL_ALIAS  = (1 << 3)  // MD2/Entity.
 } ps2_mdl_type_t;
 
 /*
@@ -256,7 +263,7 @@ typedef struct ps2_model_s
     ps2_teximage_t * skins[MAX_MD2SKINS];
 
     // Registration number, so we know if it is currently referenced by the level being played.
-    int registration_sequence;
+    u32 registration_sequence;
 
     // Memory hunk backing the model's data.
     mem_hunk_t hunk;
@@ -290,9 +297,12 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags);
 // Loads the world model used by the current level the game wants.
 // The returned pointer points to an internal shared instance, so
 // only one world model is allowed at any time.
-ps2_model_t * PS2_ModelLoadWorld(const char * name);
+void PS2_ModelLoadWorld(const char * name);
 
 // Frees a model previously acquired from FindOrLoad.
 void PS2_ModelFree(ps2_model_t * mdl);
+
+// Called by EndRegistration() to free models not referenced by the new level.
+void PS2_ModelFreeUnused(void);
 
 #endif // PS2_MODEL_H

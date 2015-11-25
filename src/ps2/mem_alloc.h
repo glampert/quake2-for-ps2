@@ -21,16 +21,30 @@ typedef enum
     MEMTAG_QUAKE,      // Game allocations: Z_Malloc/Z_TagMalloc/etc.
     MEMTAG_RENDERER,   // Things related to rendering / the refresh module.
     MEMTAG_TEXIMAGE,   // Allocs related to images/textures/palettes.
-    MEMTAG_HUNK_ALLOC, // Allocs for the Hunk_*() functions.
+    MEMTAG_MDL_ALIAS,  // MD2/Alias models.
+    MEMTAG_MDL_SPRITE, // Sprite models.
+    MEMTAG_MDL_WORLD,  // World geometry.
     MEMTAG_COUNT       // Number of entries in this enum. Internal use only.
 } ps2_mem_tag_t;
 
-extern const char * ps2_mem_tag_names[MEMTAG_COUNT];  // Printable strings for the above enum.
-extern unsigned int ps2_mem_tag_counts[MEMTAG_COUNT]; // Current memory counts for each of the above tags.
+typedef struct
+{
+    unsigned int total_bytes;
+    unsigned int total_allocs;
+    unsigned int total_frees;
+    unsigned int smallest_alloc;
+    unsigned int largest_alloc;
+} ps2_mem_counters_t;
+
+extern const char * ps2_mem_tag_names[MEMTAG_COUNT];        // Printable strings for the above enum.
+extern ps2_mem_counters_t ps2_mem_tag_counts[MEMTAG_COUNT]; // Current memory counts for each of the above tags.
 
 // Allocators:
 void * PS2_MemAlloc(int size_bytes, ps2_mem_tag_t tag);
 void PS2_MemFree(void * ptr, int size_bytes, ps2_mem_tag_t tag);
+
+void PS2_TagsAddExecutableMem(unsigned int size_bytes);
+void PS2_TagsAddRenderPacketMem(unsigned int size_bytes);
 
 // Formatter for printing the memory tags.
 const char * PS2_FormatMemoryUnit(unsigned int memorySizeInBytes, int abbreviated);

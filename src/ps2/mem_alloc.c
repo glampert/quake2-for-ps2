@@ -25,18 +25,59 @@ const char * ps2_mem_tag_names[MEMTAG_COUNT] =
     "MISC",
     "QUAKE",
     "RENDERER",
-    "TEX_IMAGE",
-    "HUNK_ALLOC"
+    "TEX IMAGE",
+    "MDL ALIAS",
+    "MDL SPRITE",
+    "MDL WORLD"
 };
 
 // Tags updated on every alloc/free.
-unsigned int ps2_mem_tag_counts[MEMTAG_COUNT] = {0};
+ps2_mem_counters_t ps2_mem_tag_counts[MEMTAG_COUNT] = {0};
 
 //=============================================================================
 //
 // malloc/free hooks:
 //
 //=============================================================================
+
+/*
+================
+OutOfMemoryError
+
+Prints the out-of-memory report and calls Sys_Error.
+Never returns to the caller.
+================
+*/
+static void OutOfMemoryError(int alloc_attempt_size, ps2_mem_tag_t tag)
+{
+    char tags_dump_str[2048] = {0};
+    char * ptr = tags_dump_str;
+    unsigned int i, mem_total = 0;
+
+    ptr += sprintf(ptr, "Tag Name   Bytes      Allocs  Frees   Small   Large\n");
+
+    for (i = 0; i < MEMTAG_COUNT; ++i)
+    {
+        mem_total += ps2_mem_tag_counts[i].total_bytes;
+        const char * total_str = PS2_FormatMemoryUnit(ps2_mem_tag_counts[i].total_bytes, true);
+
+        ptr += sprintf(ptr, "%-10s %-10s %-7d %-7d %-7d %-7d\n",
+                ps2_mem_tag_names[i], total_str,
+                ps2_mem_tag_counts[i].total_allocs,
+                ps2_mem_tag_counts[i].total_frees,
+                ps2_mem_tag_counts[i].smallest_alloc,
+                ps2_mem_tag_counts[i].largest_alloc);
+    }
+
+    ptr += sprintf(ptr, "\nTOTAL MEM: %s", PS2_FormatMemoryUnit(mem_total, true));
+
+    Sys_Error("\nOut-of-memory for %s! Failed to alloc %s\n\n"
+              "\t\t***** Current memory tags *****\n"
+              "%s",
+              ps2_mem_tag_names[tag],
+              PS2_FormatMemoryUnit(alloc_attempt_size, true),
+              tags_dump_str);
+}
 
 /*
 ================
@@ -53,11 +94,23 @@ void * PS2_MemAlloc(int size_bytes, ps2_mem_tag_t tag)
     void * ptr = malloc(size_bytes);
     if (ptr == NULL)
     {
-        Sys_Error("Out-of-memory for tag %s! Failed to alloc %d bytes.",
-                  ps2_mem_tag_names[tag], size_bytes);
+        OutOfMemoryError(size_bytes, tag);
     }
 
-    ps2_mem_tag_counts[tag] += size_bytes;
+    ps2_mem_tag_counts[tag].total_bytes += size_bytes;
+    ps2_mem_tag_counts[tag].total_allocs++;
+
+    if ((size_bytes < ps2_mem_tag_counts[tag].smallest_alloc) ||
+        (ps2_mem_tag_counts[tag].smallest_alloc == 0))
+    {
+        ps2_mem_tag_counts[tag].smallest_alloc = size_bytes;
+    }
+
+    if (size_bytes > ps2_mem_tag_counts[tag].largest_alloc)
+    {
+        ps2_mem_tag_counts[tag].largest_alloc = size_bytes;
+    }
+
     return ptr;
 }
 
@@ -73,8 +126,36 @@ void PS2_MemFree(void * ptr, int size_bytes, ps2_mem_tag_t tag)
         return;
     }
 
-    ps2_mem_tag_counts[tag] -= size_bytes;
+    ps2_mem_tag_counts[tag].total_bytes -= size_bytes;
+    ps2_mem_tag_counts[tag].total_frees++;
+
     free(ptr);
+}
+
+/*
+================
+PS2_TagsAddExecutableMem
+================
+*/
+void PS2_TagsAddExecutableMem(unsigned int size_bytes)
+{
+    ps2_mem_tag_counts[MEMTAG_MISC].total_bytes += size_bytes;
+    ps2_mem_tag_counts[MEMTAG_MISC].largest_alloc  = ps2_mem_tag_counts[MEMTAG_MISC].total_bytes;
+    ps2_mem_tag_counts[MEMTAG_MISC].smallest_alloc = ps2_mem_tag_counts[MEMTAG_MISC].total_bytes;
+    ps2_mem_tag_counts[MEMTAG_MISC].total_allocs++;
+}
+
+/*
+================
+PS2_TagsAddRenderPacketMem
+================
+*/
+void PS2_TagsAddRenderPacketMem(unsigned int size_bytes)
+{
+    ps2_mem_tag_counts[MEMTAG_RENDERER].total_bytes += size_bytes;
+    ps2_mem_tag_counts[MEMTAG_RENDERER].largest_alloc  = ps2_mem_tag_counts[MEMTAG_RENDERER].total_bytes;
+    ps2_mem_tag_counts[MEMTAG_RENDERER].smallest_alloc = ps2_mem_tag_counts[MEMTAG_RENDERER].total_bytes;
+    ps2_mem_tag_counts[MEMTAG_RENDERER].total_allocs++;
 }
 
 /*
@@ -182,7 +263,7 @@ const char * PS2_FormatMemoryUnit(unsigned int size_bytes, int abbreviated)
 
 //=============================================================================
 //
-// Hunk memory allocator (similar to a stack), used by the Game and Renderer:
+// Hunk memory allocator (similar to a stack), used by the renderer:
 //
 //=============================================================================
 
@@ -191,11 +272,12 @@ const char * PS2_FormatMemoryUnit(unsigned int size_bytes, int abbreviated)
 Hunk_New
 ================
 */
-void Hunk_New(mem_hunk_t * hunk, int max_size)
+void Hunk_New(mem_hunk_t * hunk, int max_size, int mem_tag)
 {
     hunk->curr_size = 0;
     hunk->max_size  = max_size;
-    hunk->base_ptr  = PS2_MemAlloc(max_size, MEMTAG_HUNK_ALLOC);
+    hunk->mem_tag   = mem_tag;
+    hunk->base_ptr  = PS2_MemAlloc(max_size, (ps2_mem_tag_t)mem_tag);
     memset(hunk->base_ptr, 0, max_size);
 }
 
@@ -208,8 +290,11 @@ void Hunk_Free(mem_hunk_t * hunk)
 {
     if (hunk->base_ptr != NULL)
     {
-        PS2_MemFree(hunk->base_ptr, hunk->max_size, MEMTAG_HUNK_ALLOC);
-        PS2_MemClearObj(hunk);
+        PS2_MemFree(hunk->base_ptr, hunk->max_size, (ps2_mem_tag_t)hunk->mem_tag);
+        hunk->base_ptr  = NULL;
+        hunk->curr_size = 0;
+        hunk->max_size  = 0;
+        hunk->mem_tag   = 0;
     }
 }
 

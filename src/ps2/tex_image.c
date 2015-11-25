@@ -67,6 +67,12 @@ ps2_teximage_t * builtin_tex_help      = NULL;
 ps2_teximage_t * builtin_tex_backtile  = NULL;
 ps2_teximage_t * builtin_tex_debug     = NULL;
 
+// Stats for debug printing:
+int ps2_teximages_used         = 0;
+int ps2_teximage_cache_hits    = 0;
+int ps2_unused_teximages_freed = 0;
+int ps2_teximages_failed       = 0;
+
 //=============================================================================
 //
 // Texture image allocations and management:
@@ -123,7 +129,7 @@ PS2_TexImageInit
 */
 void PS2_TexImageInit(void)
 {
-    if (ps2ref.num_teximages != 0)
+    if (ps2_teximages_used != 0)
     {
         Sys_Error("Invalid PS2_TexImageInit call!");
     }
@@ -170,11 +176,18 @@ PS2_TexImageShutdown
 */
 void PS2_TexImageShutdown(void)
 {
-    //TODO cleanup all allocated textures on ps2ref.teximages!!
-    //remember we can't free the debug tex since it is generated!!!
-    //teximages with type IT_BUILTIN can't be freed
-
-    ps2ref.num_teximages = 0;
+    // Free all non-null, non-built-in images:
+    u32 i;
+    ps2_teximage_t * teximage_iter = ps2ref.teximages;
+    for (i = 0; i < MAX_TEXIMAGES; ++i, ++teximage_iter)
+    {
+        if (teximage_iter->type == IT_NULL || teximage_iter->type == IT_BUILTIN)
+        {
+            continue;
+        }
+        PS2_TexImageFree(teximage_iter);
+    }
+    ps2_teximages_used = 0;
 }
 
 /*
@@ -184,14 +197,85 @@ PS2_TexImageAlloc
 */
 ps2_teximage_t * PS2_TexImageAlloc(void)
 {
-    if (ps2ref.num_teximages == MAX_TEXIMAGES)
+    if (ps2_teximages_used == MAX_TEXIMAGES)
     {
         Sys_Error("Out of tex image objects!!!");
     }
 
-    //TODO assume always sequential, or allow empty gaps???
-    // -- should also look into the registration_sequence trick used by ref_gl
-    return &ps2ref.teximages[ps2ref.num_teximages++];
+    //
+    // Find a free slot in the image pool:
+    //
+    u32 i;
+    ps2_teximage_t * teximage_iter = ps2ref.teximages;
+    for (i = 0; i < MAX_TEXIMAGES; ++i, ++teximage_iter)
+    {
+        if (teximage_iter->type == IT_NULL)
+        {
+            ++ps2_teximages_used;
+            return teximage_iter;
+        }
+    }
+
+    Sys_Error("Out of tex image objects! Can't find a free slot!");
+    return NULL;
+}
+
+/*
+==============
+PS2_TexImageFree
+==============
+*/
+void PS2_TexImageFree(ps2_teximage_t * teximage)
+{
+    if (teximage == NULL)
+    {
+        return;
+    }
+
+    // Built-ins will always be referencing static program data.
+    if (teximage->pic != NULL && teximage->type != IT_BUILTIN)
+    {
+        int size_bytes;
+        switch (teximage->texbuf.psm)
+        {
+        case GS_PSM_32 :
+            size_bytes = (teximage->width * teximage->height * 4);
+            break;
+        case GS_PSM_16 :
+            size_bytes = (teximage->width * teximage->height * 2);
+            break;
+        default : // Assume 8bits palettized.
+            size_bytes = (teximage->width * teximage->height * 1);
+            break;
+        } // switch (teximage->texbuf.psm)
+
+        PS2_MemFree(teximage->pic, size_bytes, MEMTAG_TEXIMAGE);
+        PS2_MemClearObj(teximage);
+        --ps2_teximages_used;
+    }
+}
+
+/*
+==============
+PS2_TexImageFreeUnused
+==============
+*/
+void PS2_TexImageFreeUnused(void)
+{
+    u32 i;
+    ps2_teximage_t * teximage_iter = ps2ref.teximages;
+    for (i = 0; i < MAX_TEXIMAGES; ++i, ++teximage_iter)
+    {
+        if (teximage_iter->type == IT_NULL || teximage_iter->type == IT_BUILTIN)
+        {
+            continue;
+        }
+        if (teximage_iter->registration_sequence != ps2ref.registration_sequence)
+        {
+            PS2_TexImageFree(teximage_iter);
+            ++ps2_unused_teximages_freed;
+        }
+    }
 }
 
 /*
@@ -360,7 +444,7 @@ static ps2_teximage_t * LoadPcxImpl(const char * name, int flags)
     if ((flags & IT_PIC) && width <= 64 && height <= 166)
     {
         // Notice that we allow some pretty tall images (h <= 166).
-        // That's the size of m_main_plaque, the Quake2 logo on
+        // That's the size of 'm_main_plaque', the Quake2 logo in
         // the main menu. This image was impossible to resize in
         // a descent way on allocation, so I've change the atlas
         // allocation criteria here to allow it's height, so it
@@ -376,6 +460,8 @@ static ps2_teximage_t * LoadPcxImpl(const char * name, int flags)
 
     // The palettized image is no longer needed.
     PS2_MemFree(pic8, width * height, MEMTAG_TEXIMAGE);
+
+    teximage->registration_sequence = ps2ref.registration_sequence;
     return teximage;
 }
 
@@ -411,6 +497,8 @@ static ps2_teximage_t * LoadWalImpl(const char * name, int flags)
     teximage = Common8BitTexSetup(pic8, width, height, name, flags | IT_WALL);
 
     FS_FreeFile((void *)wall);
+
+    teximage->registration_sequence = ps2ref.registration_sequence;
     return teximage;
 }
 
@@ -454,6 +542,7 @@ static ps2_teximage_t * LoadTgaImpl(const char * name, int flags)
     PS2_TexImageSetup(teximage, name, width, height, format, TEXTURE_FUNCTION_MODULATE,
                       psm, mag_filter, min_filter, (ps2_imagetype_t)img_type, pic32);
 
+    teximage->registration_sequence = ps2ref.registration_sequence;
     return teximage;
 }
 
@@ -469,6 +558,7 @@ static ps2_teximage_t * FindImageImpl(const char * name, int flags)
     if (name == NULL || *name == '\0')
     {
         Com_DPrintf("FindImage: Null/empty image name!\n");
+        ++ps2_teximages_failed;
         return NULL;
     }
 
@@ -476,6 +566,7 @@ static ps2_teximage_t * FindImageImpl(const char * name, int flags)
     if (name_len < 5 || name_len >= MAX_QPATH)
     {
         Com_DPrintf("FindImage: Bad image name length: '%s'\n", name);
+        ++ps2_teximages_failed;
         return NULL;
     }
 
@@ -486,14 +577,22 @@ static ps2_teximage_t * FindImageImpl(const char * name, int flags)
     // First, lookup our cache:
     //
     u32 i;
-    const u32 num_teximages    = ps2ref.num_teximages;
-    ps2_teximage_t * teximages = ps2ref.teximages;
-
-    for (i = 0; i < num_teximages; ++i)
+    ps2_teximage_t * teximage_iter = ps2ref.teximages;
+    for (i = 0; i < MAX_TEXIMAGES; ++i, ++teximage_iter)
     {
-        if ((name_hash == teximages[i].hash) && (flags & teximages[i].type))
+        if (teximage_iter->type == IT_NULL)
         {
-            return &teximages[i];
+            continue;
+        }
+        if ((name_hash == teximage_iter->hash) && (flags & teximage_iter->type))
+        {
+            if (ps2ref.registration_started)
+            {
+                ++ps2_teximage_cache_hits;
+            }
+
+            teximage_iter->registration_sequence = ps2ref.registration_sequence;
+            return teximage_iter;
         }
     }
 
@@ -504,18 +603,17 @@ static ps2_teximage_t * FindImageImpl(const char * name, int flags)
     {
         return LoadPcxImpl(name, flags);
     }
-
     if (strcmp(name + name_len - 4, ".wal") == 0)
     {
         return LoadWalImpl(name, flags);
     }
-
     if (strcmp(name + name_len - 4, ".tga") == 0)
     {
         return LoadTgaImpl(name, flags);
     }
 
     Com_DPrintf("WARNING: Unable to find image '%s'\n", name);
+    ++ps2_teximages_failed;
     return NULL;
 }
 
@@ -588,6 +686,7 @@ void PS2_TexImageSetup(ps2_teximage_t * teximage, const char * name, int w, int 
     teximage->texbuf.info.height     = draw_log2(h);
     teximage->texbuf.info.components = components;
     teximage->texbuf.info.function   = func;
+    teximage->registration_sequence  = 0;
 
     // These are only used by the scrap atlas.
     teximage->u0 = teximage->u1 = 0;
@@ -596,36 +695,6 @@ void PS2_TexImageSetup(ps2_teximage_t * teximage, const char * name, int w, int 
     // Finally, copy and hash the name string:
     strncpy(teximage->name, name, MAX_QPATH);
     teximage->hash = Sys_HashString(name);
-}
-
-/*
-==============
-PS2_TexImageFree
-==============
-*/
-void PS2_TexImageFree(ps2_teximage_t * teximage)
-{
-    // Built-ins will always be referencing static program data.
-    if (teximage->pic != NULL && teximage->type != IT_BUILTIN)
-    {
-        int size_bytes;
-        switch (teximage->texbuf.psm)
-        {
-        case GS_PSM_32 :
-            size_bytes = (teximage->width * teximage->height * 4);
-            break;
-        case GS_PSM_16 :
-            size_bytes = (teximage->width * teximage->height * 2);
-            break;
-        default : // Assume 8bits palettized.
-            size_bytes = (teximage->width * teximage->height * 1);
-            break;
-        } // switch (teximage->texbuf.psm)
-
-        PS2_MemFree(teximage->pic, size_bytes, MEMTAG_TEXIMAGE);
-    }
-
-    PS2_MemClearObj(teximage);
 }
 
 /*
