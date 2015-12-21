@@ -21,10 +21,10 @@ fmodf for the PS2
 float fmodf(float x, float y)
 {
     /*
-	 * Portable fmod(x,y) implementation for systems
-	 * that don't have it. Adapted from code found here:
-	 *  http://www.opensource.apple.com/source/python/python-3/python/Python/fmod.c
-	 */
+     * Portable fmod(x,y) implementation for systems
+     * that don't have it. Adapted from code found here:
+     *  http://www.opensource.apple.com/source/python/python-3/python/Python/fmod.c
+     */
     float i, f;
 
     if (y == 0.0f)

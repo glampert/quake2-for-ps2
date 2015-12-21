@@ -461,6 +461,9 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags)
     {
     case IDALIASHEADER :
 // TODO
+// Should probably try to load the MD2 in-place to avoid allocating twice.
+// Or maybe we'll just preprocess it and save an optimized PS2 renderer representation?...
+//
 //        Hunk_New(&new_model->hunk, 0x200000, MEMTAG_MDL_ALIAS);
         Hunk_New(&new_model->hunk, file_len + 512, MEMTAG_MDL_ALIAS);
         LoadAliasModel(new_model, file_data);

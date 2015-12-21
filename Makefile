@@ -9,6 +9,9 @@
 #  Quake 2 source files:
 # ---------------------------------------------------------
 
+# TODO experiment with dlmalloc
+# ps2/dlmalloc/malloc.c
+
 # All files used by the game and engine:
 SRC_FILES = \
 	ps2/tests/test_draw2d.c \
