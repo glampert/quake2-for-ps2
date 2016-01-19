@@ -4001,7 +4001,6 @@ const char * M_Quit_Key(int key)
 void M_Quit_Draw(void)
 {
     int w, h;
-
     re.DrawGetPicSize(&w, &h, "quit");
     re.DrawPic((viddef.width - w) / 2, (viddef.height - h) / 2, "quit");
 }

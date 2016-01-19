@@ -14,7 +14,7 @@
 #define PS2_MEM_ALLOC_H
 
 // NOTE:
-// Be sure to updated ps2_mem_tag_names[] in the .c when changing this!
+// Be sure to update ps2_mem_tag_names[] in the .c when changing this!
 typedef enum
 {
     MEMTAG_MISC,       // Miscellaneous/uncategorized (includes the estimate size of the ELF executable).
@@ -41,10 +41,9 @@ extern ps2_mem_counters_t ps2_mem_tag_counts[MEMTAG_COUNT]; // Current memory co
 
 // Allocators:
 void * PS2_MemAlloc(int size_bytes, ps2_mem_tag_t tag);
+void * PS2_MemAllocAligned(int alignment, int size_bytes, ps2_mem_tag_t tag);
 void PS2_MemFree(void * ptr, int size_bytes, ps2_mem_tag_t tag);
-
-void PS2_TagsAddExecutableMem(unsigned int size_bytes);
-void PS2_TagsAddRenderPacketMem(unsigned int size_bytes);
+void PS2_TagsAddMem(ps2_mem_tag_t tag, unsigned int size_bytes);
 
 // Formatter for printing the memory tags.
 const char * PS2_FormatMemoryUnit(unsigned int memorySizeInBytes, int abbreviated);

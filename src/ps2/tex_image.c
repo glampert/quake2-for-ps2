@@ -14,6 +14,9 @@
 #include "ps2/mem_alloc.h"
 #include "common/q_files.h"
 
+#include <draw.h>
+#include <gs_psm.h>
+
 //
 // Built-in images found in src/ps2/builtin/
 //
@@ -72,6 +75,7 @@ int ps2_teximages_used         = 0;
 int ps2_teximage_cache_hits    = 0;
 int ps2_unused_teximages_freed = 0;
 int ps2_teximages_failed       = 0;
+int ps2_scrap_allocs           = 0;
 
 //=============================================================================
 //
@@ -143,11 +147,6 @@ void PS2_TexImageInit(void)
                       TEXTURE_COMPONENTS_RGB, TEXTURE_FUNCTION_MODULATE, GS_PSM_16,
                       LOD_MAG_NEAREST, LOD_MIN_NEAREST, IT_BUILTIN, (byte *)CheckerPattern());
 
-    builtin_tex_backtile = PS2_TexImageAlloc();
-    PS2_TexImageSetup(builtin_tex_backtile, "pics/backtile.pcx", backtile_width,backtile_height,
-                      TEXTURE_COMPONENTS_RGB, TEXTURE_FUNCTION_MODULATE, GS_PSM_16,
-                      LOD_MAG_NEAREST, LOD_MIN_NEAREST, IT_BUILTIN, (byte *)backtile_data);
-
     builtin_tex_inventory = PS2_TexImageAlloc();
     PS2_TexImageSetup(builtin_tex_inventory, "pics/inventory.pcx", inventory_width, inventory_height,
                       TEXTURE_COMPONENTS_RGB, TEXTURE_FUNCTION_MODULATE, GS_PSM_16,
@@ -162,6 +161,11 @@ void PS2_TexImageInit(void)
     PS2_TexImageSetup(builtin_tex_conback, "pics/conback.pcx", conback_width, conback_height,
                       TEXTURE_COMPONENTS_RGB, TEXTURE_FUNCTION_MODULATE, GS_PSM_16,
                       LOD_MAG_NEAREST, LOD_MIN_NEAREST, IT_BUILTIN, (byte *)conback_data);
+
+    builtin_tex_backtile = PS2_TexImageAlloc();
+    PS2_TexImageSetup(builtin_tex_backtile, "pics/backtile.pcx", backtile_width,backtile_height,
+                      TEXTURE_COMPONENTS_RGB, TEXTURE_FUNCTION_MODULATE, GS_PSM_16,
+                      LOD_MAG_NEAREST, LOD_MIN_NEAREST, IT_BUILTIN, (byte *)backtile_data);
 
     builtin_tex_conchars = PS2_TexImageAlloc();
     PS2_TexImageSetup(builtin_tex_conchars, "pics/conchars.pcx", conchars_width, conchars_height,
@@ -840,7 +844,7 @@ ps2_teximage_t * Img_ScrapAlloc(const byte * pic8in, int w, int h, const char * 
     scrap_teximage->u1 = sx + w;
     scrap_teximage->v1 = sy + h;
 
-    perfcnt.scrap_allocs++;
+    ps2_scrap_allocs++;
     return scrap_teximage;
 }
 

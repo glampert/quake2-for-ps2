@@ -16,9 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// We fail with a hard error if out-of-memory.
-extern void Sys_Error(const char * error, ...);
-
 // For debug printing
 const char * ps2_mem_tag_names[MEMTAG_COUNT] =
 {
@@ -44,7 +41,7 @@ ps2_mem_counters_t ps2_mem_tag_counts[MEMTAG_COUNT] = {0};
 ================
 OutOfMemoryError
 
-Prints the out-of-memory report and calls Sys_Error.
+Prints the out-of-memory report and calls Sys_Error().
 Never returns to the caller.
 ================
 */
@@ -116,6 +113,45 @@ void * PS2_MemAlloc(int size_bytes, ps2_mem_tag_t tag)
 
 /*
 ================
+PS2_MemAllocAligned
+================
+*/
+void * PS2_MemAllocAligned(int alignment, int size_bytes, ps2_mem_tag_t tag)
+{
+    if (size_bytes <= 0)
+    {
+        Sys_Error("Trying to allocate zero or negative size (%d)!", size_bytes);
+    }
+    if (alignment <= 0)
+    {
+        Sys_Error("PS2_MemAllocAligned: Bad alignment: %d!", alignment);
+    }
+
+    void * ptr = memalign(alignment, size_bytes);
+    if (ptr == NULL)
+    {
+        OutOfMemoryError(size_bytes, tag);
+    }
+
+    ps2_mem_tag_counts[tag].total_bytes += size_bytes;
+    ps2_mem_tag_counts[tag].total_allocs++;
+
+    if ((size_bytes < ps2_mem_tag_counts[tag].smallest_alloc) ||
+        (ps2_mem_tag_counts[tag].smallest_alloc == 0))
+    {
+        ps2_mem_tag_counts[tag].smallest_alloc = size_bytes;
+    }
+
+    if (size_bytes > ps2_mem_tag_counts[tag].largest_alloc)
+    {
+        ps2_mem_tag_counts[tag].largest_alloc = size_bytes;
+    }
+
+    return ptr;
+}
+
+/*
+================
 PS2_MemFree
 ================
 */
@@ -129,33 +165,21 @@ void PS2_MemFree(void * ptr, int size_bytes, ps2_mem_tag_t tag)
     ps2_mem_tag_counts[tag].total_bytes -= size_bytes;
     ps2_mem_tag_counts[tag].total_frees++;
 
+    // Good for both malloc() and memalign().
     free(ptr);
 }
 
 /*
 ================
-PS2_TagsAddExecutableMem
+PS2_TagsAddMem
 ================
 */
-void PS2_TagsAddExecutableMem(unsigned int size_bytes)
+void PS2_TagsAddMem(ps2_mem_tag_t tag, unsigned int size_bytes)
 {
-    ps2_mem_tag_counts[MEMTAG_MISC].total_bytes += size_bytes;
-    ps2_mem_tag_counts[MEMTAG_MISC].largest_alloc  = ps2_mem_tag_counts[MEMTAG_MISC].total_bytes;
-    ps2_mem_tag_counts[MEMTAG_MISC].smallest_alloc = ps2_mem_tag_counts[MEMTAG_MISC].total_bytes;
-    ps2_mem_tag_counts[MEMTAG_MISC].total_allocs++;
-}
-
-/*
-================
-PS2_TagsAddRenderPacketMem
-================
-*/
-void PS2_TagsAddRenderPacketMem(unsigned int size_bytes)
-{
-    ps2_mem_tag_counts[MEMTAG_RENDERER].total_bytes += size_bytes;
-    ps2_mem_tag_counts[MEMTAG_RENDERER].largest_alloc  = ps2_mem_tag_counts[MEMTAG_RENDERER].total_bytes;
-    ps2_mem_tag_counts[MEMTAG_RENDERER].smallest_alloc = ps2_mem_tag_counts[MEMTAG_RENDERER].total_bytes;
-    ps2_mem_tag_counts[MEMTAG_RENDERER].total_allocs++;
+    ps2_mem_tag_counts[tag].total_bytes += size_bytes;
+    ps2_mem_tag_counts[tag].largest_alloc  = ps2_mem_tag_counts[tag].total_bytes;
+    ps2_mem_tag_counts[tag].smallest_alloc = ps2_mem_tag_counts[tag].total_bytes;
+    ps2_mem_tag_counts[tag].total_allocs++;
 }
 
 /*
@@ -219,7 +243,7 @@ const char * PS2_FormatMemoryUnit(unsigned int size_bytes, int abbreviated)
         fmtbuf[1] = '?';
         fmtbuf[2] = '?';
         fmtbuf[3] = '\0';
-        return fmtbuf; // Error return
+        return fmtbuf;
     }
 
     // Remove trailing zeros if no significant decimal digits:
@@ -228,17 +252,16 @@ const char * PS2_FormatMemoryUnit(unsigned int size_bytes, int abbreviated)
     {
         if (*p == '.')
         {
-            // Find the end of the string
+            // Find the end of the string:
             while (*++p)
             {
             }
-
-            // Remove trailing zeros
+            // Remove trailing zeros:
             while (*--p == '0')
             {
                 *p = '\0';
             }
-            // If the dot was left alone at the end, remove it too
+            // If the dot was left alone at the end, remove it too.
             if (*p == '.')
             {
                 *p = '\0';
@@ -255,7 +278,7 @@ const char * PS2_FormatMemoryUnit(unsigned int size_bytes, int abbreviated)
         fmtbuf[1] = '?';
         fmtbuf[2] = '?';
         fmtbuf[3] = '\0';
-        return fmtbuf; // Error return
+        return fmtbuf;
     }
 
     return fmtbuf;

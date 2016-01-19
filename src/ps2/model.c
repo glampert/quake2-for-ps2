@@ -162,13 +162,14 @@ void PS2_ModelFreeUnused(void)
 
 /*
 ==============
-LoadAliasModel
+LoadAliasMD2Model
 
 Remarks: Local function.
 Fails with a Sys_Error if the data is invalid.
+Adapted from ref_gl.
 ==============
 */
-static void LoadAliasModel(ps2_model_t * mdl, const void * mdl_data)
+static void LoadAliasMD2Model(ps2_model_t * mdl, const void * mdl_data)
 {
     int i, j;
     const dmdl_t * p_mdl_data_in = (const dmdl_t *)mdl_data;
@@ -365,8 +366,8 @@ Remarks: Local function.
 */
 static inline ps2_model_t * FindInlineModel(const char * name)
 {
-    //FIXME temp
-    int i=0;
+    //FIXME temporarily disabled for testing
+    int i = 0;
     /*
     int i = atoi(name + 1);
     if (i < 1 || !ps2_world_model || i >= ps2_world_model->num_submodels)
@@ -439,10 +440,10 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags)
     // Else, load from file for the first time:
     //
     ps2_model_t * new_model = PS2_ModelAlloc();
-
     strncpy(new_model->name, name, MAX_QPATH); // Save the name string for console printing
     new_model->hash = name_hash;               // We've already computed the name hash above!
 
+    // Load raw file data:
     void * file_data = NULL;
     const int file_len = FS_LoadFile(name, &file_data);
     if (file_data == NULL || file_len <= 0)
@@ -456,7 +457,7 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags)
     }
 
     // Call the appropriate loader:
-    const unsigned int id = LittleLong(*(unsigned int *)file_data);
+    const u32 id = LittleLong(*(u32 *)file_data);
     switch (id)
     {
     case IDALIASHEADER :
@@ -466,7 +467,7 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags)
 //
 //        Hunk_New(&new_model->hunk, 0x200000, MEMTAG_MDL_ALIAS);
         Hunk_New(&new_model->hunk, file_len + 512, MEMTAG_MDL_ALIAS);
-        LoadAliasModel(new_model, file_data);
+        LoadAliasMD2Model(new_model, file_data);
         break;
 
     case IDSPRITEHEADER :
@@ -487,7 +488,6 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags)
 
     default :
         Sys_Error("FindModel: Unknown file id (0x%X) for '%s'!", id, name);
-        break;
     } // switch (id)
 
     // Done with the original file.

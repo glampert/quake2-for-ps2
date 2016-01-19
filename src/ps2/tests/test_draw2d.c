@@ -17,6 +17,7 @@
 // Functions exported from this file:
 void Test_PS2_Draw2D(void);
 void Test_PS2_Cinematics(void);
+void Test_PS2_QuakeMenus(void);
 
 //=============================================================================
 //
@@ -28,11 +29,6 @@ static ps2_teximage_t * scrap_tex_0 = NULL;
 static ps2_teximage_t * scrap_tex_1 = NULL;
 static ps2_teximage_t * scrap_tex_2 = NULL;
 static ps2_teximage_t * scrap_tex_3 = NULL;
-
-static byte scrap_test_0[24 * 24] __attribute__((aligned(16)));
-static byte scrap_test_1[32 * 32] __attribute__((aligned(16)));
-static byte scrap_test_2[64 * 64] __attribute__((aligned(16)));
-static byte scrap_test_3[16 * 16] __attribute__((aligned(16)));
 
 static byte * CheckerPattern(byte color0, byte color1, int size, byte * buffer)
 {
@@ -54,6 +50,12 @@ static byte * CheckerPattern(byte color0, byte color1, int size, byte * buffer)
 
 static void InitTestScraps(void)
 {
+    // These get copied into the scrap.
+    byte scrap_test_0[24 * 24] __attribute__((aligned(16)));
+    byte scrap_test_1[32 * 32] __attribute__((aligned(16)));
+    byte scrap_test_2[64 * 64] __attribute__((aligned(16)));
+    byte scrap_test_3[16 * 16] __attribute__((aligned(16)));
+
     // Color values are indexed into the global_palette.
     scrap_tex_0 = Img_ScrapAlloc(CheckerPattern(50,  65,  24, scrap_test_0), 24, 24, "scrap_test_0");
     scrap_tex_1 = Img_ScrapAlloc(CheckerPattern(70,  85,  32, scrap_test_1), 32, 32, "scrap_test_1");
@@ -119,7 +121,7 @@ static void DrawStringTests(void)
 
 static void DrawMiscTests(void)
 {
-    PS2_DrawString(350, 80, "Draw Tile Clear Block");
+    PS2_DrawString(350, 70, "Draw \nTile Clear");
     PS2_DrawTileClear(300, 35, viddef.width - 300 - 10, 100, "backtile");
 
     PS2_DrawFill(300, 150, 60, 60, 54);
@@ -159,7 +161,7 @@ static void DrawMiscTests(void)
         "      V   V         \n"
     );
 
-    // Move it up and down in the corner.
+    // Move pic up and down in the corner.
     static int y = 80;
     static int y_incr = 1;
     PS2_DrawPic(viddef.width - 70, viddef.height - y, "debug");
@@ -182,10 +184,6 @@ static void DrawMiscTests(void)
 
 void Test_PS2_Draw2D(void)
 {
-    int argc = 1;
-    char * argv[] = { "Test_PS2_Draw2D" };
-    Qcommon_Init(argc, argv);
-
     Com_Printf("====== QPS2 - Test_PS2_Draw2D ======\n");
 
     // Clear the screen to dark gray. Default color is black.
@@ -234,12 +232,9 @@ static const char * cinematics_files[] =
 };
 #undef CIN_PATH
 
-enum
-{
-    NUM_CINEMATICS = sizeof(cinematics_files) / sizeof(cinematics_files[0])
-};
-
 static int next_cinematic = 0;
+enum { NUM_CINEMATICS = sizeof(cinematics_files) / sizeof(cinematics_files[0]) };
+
 static qboolean StartNextCinematic(void)
 {
     return CinematicTest_PlayDirect(cinematics_files[next_cinematic++]);
@@ -247,10 +242,6 @@ static qboolean StartNextCinematic(void)
 
 void Test_PS2_Cinematics(void)
 {
-    int argc = 1;
-    char * argv[] = { "Test_PS2_Cinematics" };
-    Qcommon_Init(argc, argv);
-
     Com_Printf("====== QPS2 - Test_PS2_Cinematics ======\n");
 
     qboolean cin_ok = StartNextCinematic();
@@ -288,11 +279,71 @@ void Test_PS2_Cinematics(void)
 
 //=============================================================================
 //
-// Test_PS2_VU1_Microcode:
+// Test_PS2_QuakeMenus -- Cycles through the Quake2 menu screens.
 //
 //=============================================================================
 
-void Test_PS2_VU1_Microcode(void)
+static const char * all_menu_names[] =
 {
-    //TODO
+    "menu_main",
+    "menu_game",
+    "menu_loadgame",
+    "menu_savegame",
+    "menu_joinserver",
+    "menu_addressbook",
+    "menu_startserver",
+    "menu_dmoptions",
+    "menu_playerconfig",
+    "menu_downloadoptions",
+    "menu_credits",
+    "menu_multiplayer",
+    "menu_video",
+    "menu_options",
+    "menu_keys",
+    "menu_quit"
+};
+
+enum
+{
+    NUM_MENUS = sizeof(all_menu_names) / sizeof(all_menu_names[0]),
+    MENU_MSEC = 6 * 1000
+};
+
+static int next_menu = 0;
+static int time_til_next_menu = MENU_MSEC;
+
+void Test_PS2_QuakeMenus(void)
+{
+    Com_Printf("====== QPS2 - Test_PS2_Cinematics ======\n");
+
+    int time;
+    int oldtime;
+    int newtime;
+
+    Cbuf_AddText(all_menu_names[next_menu]);
+    oldtime = Sys_Milliseconds();
+
+    for (;;)
+    {
+        do
+        {
+            newtime = Sys_Milliseconds();
+            time = newtime - oldtime;
+        } while (time < 1);
+
+        Qcommon_Frame(time);
+        oldtime = newtime;
+
+        if (time_til_next_menu <= 0 && next_menu < NUM_MENUS)
+        {
+            Cbuf_AddText(all_menu_names[next_menu++]);
+            time_til_next_menu = MENU_MSEC;
+        }
+        else if (next_menu >= NUM_MENUS)
+        {
+            Sys_Error("Menu cycle test completed. Exiting...");
+        }
+
+        time_til_next_menu -= time;
+    }
 }

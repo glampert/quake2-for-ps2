@@ -17,11 +17,8 @@
 
 // PS2DEV SDK:
 #include <tamtypes.h>
-#include <gs_psm.h>
-#include <graph.h>
-#include <draw.h>
-#include <draw3d.h>
-#include <packet.h>
+#include <draw_buffers.h>
+#include <draw_types.h>
 
 /*
 ==============================================================
@@ -40,8 +37,23 @@ enum
 
     // Upper texture image limits:
     MAX_TEXIMAGES      = 1024,
-    MAX_TEXIMAGE_SIZE  = 256
+    MAX_TEXIMAGE_SIZE  = 256,
+
+    // ps2_gspacket_t constants:
+    GS_PACKET_QWC_MAX  = 65535, // Maximum number of qwords allowed, but each channel has its own limitations.
+    GS_PACKET_NORMAL   = 0x00,  // Normal EE RAM.
+    GS_PACKET_UCAB     = 0x01,  // Uncached accelerated memory.
+    GS_PACKET_SPR      = 0x02   // Scratch Pad memory.
 };
+
+// Basically the same structure of lib packet, but I needed an API
+// that didn't allocate heap memory to store this structure.
+typedef struct
+{
+    int type;
+    int qwords;
+    qword_t * data __attribute__((aligned(64)));
+} ps2_gspacket_t;
 
 // Type tag for textures/images (used internally Quake2).
 // These can be ORed for image search criteria.
@@ -85,14 +97,12 @@ typedef struct
     u32              registration_sequence;    // Bumped each BeginRegistration. Any loaded model/image not matching it is freed on EndRegistration.
     zbuffer_t        z_buffer;                 // PS2 depth buffer information.
     framebuffer_t    frame_buffers[2];         // PS2 color framebuffers (double buffered).
-    packet_t *       frame_packets[2];         // Big packets for all the drawings in a frame.
-    packet_t *       tex_upload_packet[2];     // Scratch packets used only for texture uploads to VRam.
-    packet_t *       flip_fb_packet;           // Small UCAB packet used to flip the frame buffers.
-    packet_t *       current_frame_packet;     // One of the frame_packets[] pointers for current frame.
-    qword_t  *       current_frame_qwptr;      // Pointer to the qword_ts of current_frame_packet.
-    qword_t  *       dmatag_draw2d;            // Gif tag used by the 2D mode.
-    prim_t           prim_desc;                // Misc 3D rendering params.
-    color_t          prim_color;               // Color tint of 3D primitives.
+    ps2_gspacket_t   frame_packets[2];         // Big packets for all the drawings in a frame.
+    ps2_gspacket_t   tex_upload_packet[2];     // Scratch packets used only for texture uploads to VRam.
+    ps2_gspacket_t   flip_fb_packet;           // Small UCAB packet used to flip the frame buffers.
+    ps2_gspacket_t * current_frame_packet;     // One of the frame_packets[] pointers for current frame.
+    qword_t *        current_frame_qwptr;      // Pointer to the qword_ts of current_frame_packet.
+    qword_t *        dmatag_draw2d;            // Gif tag used by the 2D mode.
     color_t          screen_color;             // Color used to wipe the screen on BeginFrame.
     u32              ui_brightness;            // From 0 to 255, defines the color added to the 2D UI textures, such as text.
     u32              fade_scr_alpha;           // How dark to fade the screen: 255=totally black, 0=no fade.
@@ -103,22 +113,13 @@ typedef struct
     ps2_teximage_t   teximages[MAX_TEXIMAGES]; // All the textures used by a game level must fit in here!
 } ps2_refresh_t;
 
-// Renderer perf counters for debugging and profiling:
-typedef struct
-{
-    u32 draws2d;
-    u32 tex_uploads;
-    u32 scrap_allocs;
-    u32 pipe_flushes;
-} ps2_perf_counters_t;
-
 // Renderer globals:
 extern int vidref_val;
 extern viddef_t viddef;
 extern ps2_refresh_t ps2ref;
-extern ps2_perf_counters_t perfcnt;
 
-// Palette used to expand the 8bits textures to RGBA-32. Imported from colormap.pcx.
+// Palette used to expand the 8bits textures to RGBA32.
+// Imported from the colormap.pcx file.
 extern const u32 global_palette[256];
 
 // Built-in texture images that are always available:
@@ -163,6 +164,7 @@ struct image_s * PS2_RegisterPic(const char * name);
 void PS2_BeginFrame(float camera_separation);
 void PS2_EndFrame(void);
 void PS2_RenderFrame(refdef_t * view_def);
+qboolean PS2_IsFrameStarted(void);
 
 /*
  * 2D overlay rendering (origin at the top-left corner of the screen):
@@ -255,5 +257,10 @@ ps2_teximage_t * Img_ScrapAlloc(const byte * pic8in, int w, int h, const char * 
 // Resize the input RGBA image using a box filter. Output and input must point to different buffers.
 void Img_Resample32(const u32 * restrict in_img, int in_width, int in_height,
                     u32 * restrict out_img, int out_width, int out_height);
+
+// GS render packet helpers:
+void PS2_PacketAlloc(ps2_gspacket_t * packet, int qwords, int type);
+void PS2_PacketFree(ps2_gspacket_t * packet);
+void PS2_PacketReset(ps2_gspacket_t * packet);
 
 #endif // PS2_REFRESH_H

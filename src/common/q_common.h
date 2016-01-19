@@ -743,9 +743,9 @@ MISC
 
 void Com_BeginRedirect(int target, char * buffer, int buffersize, void(*flush));
 void Com_EndRedirect(void);
-void Com_Printf(const char * fmt, ...);
-void Com_DPrintf(const char * fmt, ...);
-void Com_Error(int code, const char * fmt, ...);
+void Com_Printf(const char * fmt, ...) __attribute__((format(printf, 1, 2)));
+void Com_DPrintf(const char * fmt, ...) __attribute__((format(printf, 1, 2)));
+void Com_Error(int code, const char * fmt, ...) __attribute__((format(printf, 2, 3)));
 void Com_Quit(void);
 
 int Com_ServerState(void); // this should have just been a cvar...
@@ -754,7 +754,7 @@ void Com_SetServerState(int state);
 unsigned Com_BlockChecksum(void * buffer, int length);
 byte COM_BlockSequenceCRCByte(byte * base, int length, int sequence);
 
-float frand(void); // 0 to 1
+float frand(void); //  0 to 1
 float crand(void); // -1 to 1
 
 extern cvar_t * developer;
@@ -804,7 +804,7 @@ char * Sys_ConsoleInput(void);
 void Sys_ConsoleOutput(const char * string);
 void Sys_SendKeyEvents(void);
 
-void Sys_Error(const char * error, ...);
+void Sys_Error(const char * error, ...) __attribute__((format(printf, 1, 2)));
 void Sys_Quit(void);
 
 char * Sys_GetClipboardData(void);

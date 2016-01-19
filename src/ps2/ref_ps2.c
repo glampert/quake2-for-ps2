@@ -10,21 +10,30 @@
  * Check the accompanying LICENSE file for details.
  * ================================================================================================ */
 
+#include "common/q_common.h"
 #include "ps2/ref_ps2.h"
-#include "ps2/model.h"
 #include "ps2/mem_alloc.h"
+#include "ps2/model.h"
+#include "ps2/vu1.h"
 
 // PS2DEV SDK:
 #include <kernel.h>
 #include <dma_tags.h>
 #include <gif_tags.h>
+#include <gs_psm.h>
 #include <dma.h>
+#include <graph.h>
+#include <draw.h>
 
 //=============================================================================
 
 // Renderer globals (alignment not strictly required, but shouldn't harm either...)
-ps2_refresh_t       ps2ref  __attribute__((aligned(16))) = {0};
-ps2_perf_counters_t perfcnt __attribute__((aligned(16))) = {0};
+ps2_refresh_t ps2ref __attribute__((aligned(16))) = {0};
+
+// Renderer perf counters for debugging and profiling:
+static int ps2_draws2d      = 0;
+static int ps2_tex_uploads  = 0;
+static int ps2_pipe_flushes = 0;
 
 // Config vars:
 static cvar_t * r_ps2_vid_width         = NULL;
@@ -113,11 +122,14 @@ static u16 cinematic_buffer[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] __attribute__
 // Test if the texture pointer is from the scrap atlas.
 #define TEXIMAGE_IS_SCRAP(teximage_ptr) ((teximage_ptr)->u1 != 0 && (teximage_ptr)->v1 != 0)
 
+// SPR = Scratch Pad
+#define PS2_SPR_SIZE_QWORDS 0x4000     // 16 Kilobytes (16384 bytes).
+#define PS2_SPR_MEM_BEGIN   0x70000000 // Starting address of the Scratch Pad memory:
+#define PS2_UCAB_MEM_MASK   0x30000000 // ORing a pointer with this mask sets it to Uncached Accelerated (UCAB) space.
+
 //
 // Error checks:
 //
-
-extern void Sys_Error(const char * error, ...);
 #define CHECK_FRAME_STARTED()                                          \
     do                                                                 \
     {                                                                  \
@@ -130,7 +142,6 @@ extern void Sys_Error(const char * error, ...);
 //
 // DMA GIF tag helpers:
 //
-
 #define BEGIN_DMA_TAG(qword_ptr) \
     qword_t * _dma_tag_ = (qword_ptr)++
 
@@ -146,6 +157,99 @@ extern void Sys_Error(const char * error, ...);
 #define END_DMA_TAG_NAMED(tag_name, qword_ptr) \
     DMATAG_CNT((tag_name), (qword_ptr) - (tag_name) - 1, 0, 0, 0)
 
+//=============================================================================
+//
+// GS Packet handling:
+//
+//=============================================================================
+
+/*
+================
+PS2_PacketAlloc
+================
+*/
+void PS2_PacketAlloc(ps2_gspacket_t * packet, int qwords, int type)
+{
+    int byte_size = 0;
+
+    if (type == GS_PACKET_SPR) // Scratch Pad
+    {
+		if (qwords > PS2_SPR_SIZE_QWORDS)
+		{
+			Sys_Error("Scratch Pad memory can only fit up to %d quadwords!", PS2_SPR_SIZE_QWORDS);
+		}
+
+        (u32 *)packet->data = (u32 *)PS2_SPR_MEM_BEGIN;
+        qwords = PS2_SPR_SIZE_QWORDS;
+        byte_size = qwords << 4;
+    }
+    else
+    {
+        byte_size = qwords << 4;
+        packet->data = PS2_MemAllocAligned(64, byte_size, MEMTAG_RENDERER);
+
+        // Optionally set the pointer attribute to UCAB space.
+        if (type == GS_PACKET_UCAB)
+        {
+            (u32) packet->data |= (u32)PS2_UCAB_MEM_MASK;
+        }
+    }
+
+    packet->type   = type;
+    packet->qwords = qwords;
+    memset(packet->data, 0, byte_size);
+}
+
+/*
+================
+PS2_PacketFree
+================
+*/
+void PS2_PacketFree(ps2_gspacket_t * packet)
+{
+    // Free the allocated data buffer (if any).
+    if (packet->type == GS_PACKET_SPR)
+    {
+        packet->data = NULL;
+    }
+    else
+    {
+        if (packet->type == GS_PACKET_UCAB)
+        {
+            (u32)packet->data ^= (u32)PS2_UCAB_MEM_MASK;
+        }
+
+        PS2_MemFree(packet->data, packet->qwords << 4, MEMTAG_RENDERER);
+        packet->data = NULL;
+    }
+
+    packet->type   = 0;
+    packet->qwords = 0;
+}
+
+/*
+================
+PS2_PacketReset
+================
+*/
+void PS2_PacketReset(ps2_gspacket_t * packet)
+{
+    if (packet->type == GS_PACKET_SPR)
+    {
+        (u8 *)packet->data = (u8 *)PS2_SPR_MEM_BEGIN;
+        return;
+    }
+
+    if (packet->data != NULL)
+    {
+        memset(packet->data, 0, packet->qwords << 4);
+    }
+}
+
+//=============================================================================
+//
+// Renderer locals:
+//
 //=============================================================================
 
 /*
@@ -167,6 +271,36 @@ static int PS2_VRamAlloc(int width, int height, int psm, int alignment)
     int size = graph_vram_size(width, height, psm, alignment);
     ps2ref.vram_used_bytes += size * 4; // Size is in 32bit VRam words.
     return addr;
+}
+
+/*
+================
+PS2_AllocRenderPackets
+
+Remarks: Local function.
+================
+*/
+static void PS2_AllocRenderPackets(void)
+{
+    // Create double buffer render packets:
+    //
+    // FRAME_PACKET_SIZE is the number of quadwords per render packet
+    // in our double buffer. We have two of them, so this adds up to
+    // ~2 Megabytes of memory.
+    //
+    // NOTE: Currently no overflow checking is done, so drawing a
+    // very big mesh could potentially crash the renderer!
+    //
+    enum { FRAME_PACKET_SIZE = 65535 };
+    PS2_PacketAlloc(&ps2ref.frame_packets[0], FRAME_PACKET_SIZE, GS_PACKET_NORMAL);
+    PS2_PacketAlloc(&ps2ref.frame_packets[1], FRAME_PACKET_SIZE, GS_PACKET_NORMAL);
+
+    // Extra packets for texture uploads:
+    PS2_PacketAlloc(&ps2ref.tex_upload_packet[0], 128, GS_PACKET_NORMAL);
+    PS2_PacketAlloc(&ps2ref.tex_upload_packet[1], 128, GS_PACKET_NORMAL);
+
+    // One small UCAB packet used to send the flip buffer command:
+    PS2_PacketAlloc(&ps2ref.flip_fb_packet, 8, GS_PACKET_UCAB);
 }
 
 /*
@@ -256,8 +390,9 @@ Remarks: Local function.
 */
 static void PS2_InitDrawingEnvironment(void)
 {
-    // Temporary packet for the parameter setup:
-    packet_t * packet = packet_init(50, PACKET_NORMAL);
+    // We can grab one of the frame_packets to this temp.
+    // It is not in use yet.
+    ps2_gspacket_t * packet = &ps2ref.frame_packets[1];
 
     // Set framebuffer and virtual screen offsets:
     qword_t * q = packet->data;
@@ -277,8 +412,6 @@ static void PS2_InitDrawingEnvironment(void)
     q = draw_finish(q);
     dma_channel_send_normal(DMA_CHANNEL_GIF, packet->data, (q - packet->data), 0, 0);
     dma_wait_fast();
-
-    packet_free(packet);
 }
 
 /*
@@ -290,6 +423,31 @@ Remarks: Local function.
 */
 static void PS2_ClearScreen(void)
 {
+    static qword_t temp_dma_buffer[64] __attribute__((aligned(64)));
+    qword_t * qwptr = temp_dma_buffer;
+
+    int width  = viddef.width;
+    int height = viddef.height;
+
+    BEGIN_DMA_TAG(qwptr);
+    qwptr = draw_disable_tests(qwptr, 0, &ps2ref.z_buffer);
+
+    qwptr = draw_clear(qwptr, 0,
+                   2048 - (width  / 2),
+                   2048 - (height / 2),
+                   width, height,
+                   ps2ref.screen_color.r,
+                   ps2ref.screen_color.g,
+                   ps2ref.screen_color.b);
+
+    qwptr = draw_enable_tests(qwptr, 0, &ps2ref.z_buffer);
+    END_DMA_TAG(qwptr);
+
+    dma_wait_fast(); // -- Wait for previous to conclude.
+    dma_channel_send_chain(DMA_CHANNEL_GIF, temp_dma_buffer, 0, DMA_FLAG_TRANSFERTAG, 0);
+
+    //TODO tidy up
+    /*
     int width  = viddef.width;
     int height = viddef.height;
 
@@ -307,6 +465,7 @@ static void PS2_ClearScreen(void)
 
     ps2ref.current_frame_qwptr = draw_enable_tests(ps2ref.current_frame_qwptr, 0, &ps2ref.z_buffer);
     END_DMA_TAG(ps2ref.current_frame_qwptr);
+    */
 }
 
 /*
@@ -365,12 +524,12 @@ static void PS2_FlushPipeline(void)
                            0, 0);
 
     // Reset packet data pointers:
-    ps2ref.current_frame_packet = ps2ref.frame_packets[ps2ref.frame_index];
+    ps2ref.current_frame_packet = &ps2ref.frame_packets[ps2ref.frame_index];
     ps2ref.current_frame_qwptr  = ps2ref.current_frame_packet->data;
 
     // Synchronize.
     dma_wait_fast();
-    perfcnt.pipe_flushes++;
+    ps2_pipe_flushes++;
 }
 
 /*
@@ -744,8 +903,8 @@ static inline void Stats_Print(const char * str)
 
 static inline void Stats_DrawBackground(void)
 {
-    PS2_DrawFill(viddef.width - 180, draw_stats_old_y - 5,
-                 viddef.width - 10, draw_stats_curr_y - draw_stats_old_y + 5, 2);
+    PS2_DrawTileClear(viddef.width - 180, draw_stats_old_y - 5,
+                      viddef.width - 10, draw_stats_curr_y - draw_stats_old_y + 5, "backtile");
 }
 
 //===============================================
@@ -839,13 +998,13 @@ qboolean PS2_RendererInit(void * unused1, void * unused2)
     Com_DPrintf("---- PS2_RendererInit ----\n");
 
     // These can be set from a config file:
-    r_ps2_vid_width         = Cvar_Get("r_ps2_vid_width",  va("%d", DEFAULT_VID_WIDTH),  0);
-    r_ps2_vid_height        = Cvar_Get("r_ps2_vid_height", va("%d", DEFAULT_VID_HEIGHT), 0);
-    r_ps2_ui_brightness     = Cvar_Get("r_ps2_ui_brightness",     "128", 0);
-    r_ps2_fade_scr_alpha    = Cvar_Get("r_ps2_fade_scr_alpha",    "100", 0);
-    r_ps2_show_fps          = Cvar_Get("r_ps2_show_fps",          "1",   0);
-    r_ps2_show_mem_tags     = Cvar_Get("r_ps2_show_mem_tags",     "1",   0);
-    r_ps2_show_render_stats = Cvar_Get("r_ps2_show_render_stats", "1",   0);
+    r_ps2_vid_width          = Cvar_Get("r_ps2_vid_width",  va("%d", DEFAULT_VID_WIDTH),  0);
+    r_ps2_vid_height         = Cvar_Get("r_ps2_vid_height", va("%d", DEFAULT_VID_HEIGHT), 0);
+    r_ps2_ui_brightness      = Cvar_Get("r_ps2_ui_brightness",     "128", 0);
+    r_ps2_fade_scr_alpha     = Cvar_Get("r_ps2_fade_scr_alpha",    "100", 0);
+    r_ps2_show_fps           = Cvar_Get("r_ps2_show_fps",          "1",   0);
+    r_ps2_show_mem_tags      = Cvar_Get("r_ps2_show_mem_tags",     "1",   0);
+    r_ps2_show_render_stats  = Cvar_Get("r_ps2_show_render_stats", "1",   0);
 
     // Cache these, since on the PS2 we don't have a way of interacting with the console.
     viddef.width             = (int)r_ps2_vid_width->value;
@@ -864,65 +1023,20 @@ qboolean PS2_RendererInit(void * unused1, void * unused2)
     ps2ref.vram_used_bytes = 0;
 
     // Main renderer and video initialization:
+    PS2_AllocRenderPackets();
     PS2_InitGSBuffers(GRAPH_MODE_AUTO, GS_PSM_32, GS_PSMZ_32, true);
     PS2_InitDrawingEnvironment();
 
-    // Create double buffer render packets:
-    //
-    // FRAME_PACKET_SIZE is the number of quadwords per render packet
-    // in our double buffer. We have two of them, so this adds up to
-    // ~2 Megabytes of memory.
-    //
-    // NOTE: Currently no overflow checking is done, so drawing a
-    // very big mesh could potentially crash the renderer!
-    //
-    enum { FRAME_PACKET_SIZE = 65535 };
-    u32 renderer_packet_mem = 0;
-
-    ps2ref.frame_packets[0] = packet_init(FRAME_PACKET_SIZE, PACKET_NORMAL);
-    ps2ref.frame_packets[1] = packet_init(FRAME_PACKET_SIZE, PACKET_NORMAL);
-    renderer_packet_mem += (ps2ref.frame_packets[0]->qwords << 4);
-    renderer_packet_mem += (ps2ref.frame_packets[1]->qwords << 4);
-
-    // Extra packets for texture uploads:
-    ps2ref.tex_upload_packet[0] = packet_init(128, PACKET_NORMAL);
-    ps2ref.tex_upload_packet[1] = packet_init(128, PACKET_NORMAL);
-    renderer_packet_mem += (ps2ref.tex_upload_packet[0]->qwords << 4);
-    renderer_packet_mem += (ps2ref.tex_upload_packet[1]->qwords << 4);
-
-    // One small UCAB packet used to send the flip buffer command:
-    ps2ref.flip_fb_packet = packet_init(8, PACKET_UCAB);
-    renderer_packet_mem += (ps2ref.flip_fb_packet->qwords << 4);
-
-    // Plus the five packet_ts just allocated above.
-    renderer_packet_mem += sizeof(packet_t) * 5;
-    PS2_TagsAddRenderPacketMem(renderer_packet_mem);
-
     // Reset these, to be sure...
+    ps2ref.frame_started         = false;
+    ps2ref.registration_started  = false;
     ps2ref.registration_sequence = 0;
+    ps2ref.frame_index           = 0;
     ps2ref.current_frame_packet  = NULL;
     ps2ref.current_frame_qwptr   = NULL;
     ps2ref.dmatag_draw2d         = NULL;
     ps2ref.current_tex           = NULL;
-    ps2ref.frame_index           = 0;
     memset(&fps, 0, sizeof(fps));
-
-    // Init other aux data and default render states:
-    ps2ref.prim_desc.type         = PRIM_TRIANGLE;
-    ps2ref.prim_desc.shading      = PRIM_SHADE_GOURAUD;
-    ps2ref.prim_desc.mapping      = DRAW_ENABLE;
-    ps2ref.prim_desc.fogging      = DRAW_DISABLE;
-    ps2ref.prim_desc.blending     = DRAW_DISABLE;
-    ps2ref.prim_desc.antialiasing = DRAW_ENABLE;
-    ps2ref.prim_desc.mapping_type = PRIM_MAP_ST;
-    ps2ref.prim_desc.colorfix     = PRIM_UNFIXED;
-
-    // Default tint is white (no tint).
-    ps2ref.prim_color.r = 255;
-    ps2ref.prim_color.g = 255;
-    ps2ref.prim_color.b = 255;
-    ps2ref.prim_color.a = 255;
-    ps2ref.prim_color.q = 1.0f;
 
     // Default clear color is black.
     ps2ref.screen_color.r = 0;
@@ -930,6 +1044,9 @@ qboolean PS2_RendererInit(void * unused1, void * unused2)
     ps2ref.screen_color.b = 0;
     ps2ref.screen_color.a = 255;
     ps2ref.screen_color.q = 1.0f;
+
+    // Fire up the Vector Unit...
+    VU1_Init();
 
     // Gen the default images.
     PS2_TexImageInit();
@@ -940,7 +1057,7 @@ qboolean PS2_RendererInit(void * unused1, void * unused2)
     // And reserve a texture slot for the cinematic frame.
     cinematic_frame.teximage = PS2_TexImageAlloc();
 
-    // 3D mesh rendering setup:
+    // 3D mesh loading/rendering setup:
     PS2_ModelInit();
 
     Com_DPrintf("---- PS2_RendererInit completed! ( %d, %d ) ----\n", viddef.width, viddef.height);
@@ -964,18 +1081,18 @@ void PS2_RendererShutdown(void)
 
     // This is necessary to ensure the crash screen works if
     // called between BeginFrame/EndFrame, not quite sure why...
-    if (ps2ref.flip_fb_packet != NULL)
+    if (ps2ref.flip_fb_packet.data != NULL)
     {
         dma_wait_fast();
 
         framebuffer_t * fb = &ps2ref.frame_buffers[0];
-        qword_t * q = ps2ref.flip_fb_packet->data;
+        qword_t * q = ps2ref.flip_fb_packet.data;
 
         q = draw_framebuffer(q, 0, fb);
         q = draw_finish(q);
 
-        dma_channel_send_normal_ucab(DMA_CHANNEL_GIF, ps2ref.flip_fb_packet->data,
-                                     (q - ps2ref.flip_fb_packet->data), 0);
+        dma_channel_send_normal_ucab(DMA_CHANNEL_GIF, ps2ref.flip_fb_packet.data,
+                                     (q - ps2ref.flip_fb_packet.data), 0);
         dma_wait_fast();
     }
 
@@ -985,25 +1102,15 @@ void PS2_RendererShutdown(void)
 
     for (i = 0; i < 2; ++i)
     {
-        if (ps2ref.frame_packets[i] != NULL)
-        {
-            packet_free(ps2ref.frame_packets[i]);
-        }
+        PS2_PacketFree(&ps2ref.frame_packets[i]);
     }
-
     for (i = 0; i < 2; ++i)
     {
-        if (ps2ref.tex_upload_packet[i] != NULL)
-        {
-            packet_free(ps2ref.tex_upload_packet[i]);
-        }
+        PS2_PacketFree(&ps2ref.tex_upload_packet[i]);
     }
+    PS2_PacketFree(&ps2ref.flip_fb_packet);
 
-    if (ps2ref.flip_fb_packet != NULL)
-    {
-        packet_free(ps2ref.flip_fb_packet);
-    }
-
+    VU1_Shutdown();
     PS2_ModelShutdown();
     PS2_TexImageShutdown();
     PS2_MemClearObj(&ps2ref);
@@ -1111,11 +1218,11 @@ void PS2_BeginFrame(float camera_separation)
     }
 
     // Reset these perf counters for the new frame:
-    perfcnt.draws2d      = 0;
-    perfcnt.tex_uploads  = 0;
-    perfcnt.pipe_flushes = 0;
+    ps2_draws2d      = 0;
+    ps2_tex_uploads  = 0;
+    ps2_pipe_flushes = 0;
 
-    ps2ref.current_frame_packet = ps2ref.frame_packets[ps2ref.frame_index];
+    ps2ref.current_frame_packet = &ps2ref.frame_packets[ps2ref.frame_index];
     ps2ref.current_frame_qwptr  = ps2ref.current_frame_packet->data;
     ps2ref.frame_started = true;
 
@@ -1189,14 +1296,14 @@ void PS2_EndFrame(void)
 
     // Swap render framebuffer:
     framebuffer_t * fb = &ps2ref.frame_buffers[ps2ref.frame_index];
-    qword_t * q = ps2ref.flip_fb_packet->data;
+    qword_t * q = ps2ref.flip_fb_packet.data;
 
     q = draw_framebuffer(q, 0, fb);
     q = draw_finish(q);
 
     dma_wait_fast();
-    dma_channel_send_normal_ucab(DMA_CHANNEL_GIF, ps2ref.flip_fb_packet->data,
-                                 (q - ps2ref.flip_fb_packet->data), 0);
+    dma_channel_send_normal_ucab(DMA_CHANNEL_GIF, ps2ref.flip_fb_packet.data,
+                                 (q - ps2ref.flip_fb_packet.data), 0);
     draw_wait_finish();
     ps2ref.frame_started = false;
 }
@@ -1216,6 +1323,16 @@ void PS2_RenderFrame(refdef_t * view_def)
 
     (void)view_def;
     //TODO
+}
+
+/*
+================
+PS2_IsFrameStarted
+================
+*/
+qboolean PS2_IsFrameStarted(void)
+{
+    return ps2ref.frame_started;
 }
 
 /*
@@ -1251,7 +1368,7 @@ void PS2_TexImageVRamUpload(ps2_teximage_t * teximage)
         height = MAX_TEXIMAGE_SIZE;
     }
 
-    packet_t * packet = ps2ref.tex_upload_packet[ps2ref.frame_index];
+    ps2_gspacket_t * packet = &ps2ref.tex_upload_packet[ps2ref.frame_index];
     qword_t * q = packet->data;
 
     q = draw_texture_transfer(q, teximage->pic, width, height,
@@ -1262,7 +1379,7 @@ void PS2_TexImageVRamUpload(ps2_teximage_t * teximage)
     dma_wait_fast();
 
     ps2ref.current_tex = teximage;
-    perfcnt.tex_uploads++;
+    ps2_tex_uploads++;
 }
 
 /*
@@ -1433,7 +1550,7 @@ void PS2_DrawChar(int x, int y, int c)
     quad->b = (byte)ps2ref.ui_brightness;
     quad->a = 255;
 
-    perfcnt.draws2d++;
+    ps2_draws2d++;
 }
 
 /*
@@ -1521,7 +1638,7 @@ void PS2_DrawTileClear(int x, int y, int w, int h, const char * name)
     quad->b = (byte)ps2ref.ui_brightness;
     quad->a = 255;
 
-    perfcnt.draws2d++;
+    ps2_draws2d++;
 }
 
 /*
@@ -1589,7 +1706,7 @@ void PS2_DrawFill(int x, int y, int w, int h, int c)
         quad->a = 255;
     }
 
-    perfcnt.draws2d++;
+    ps2_draws2d++;
 }
 
 /*
@@ -1622,7 +1739,7 @@ void PS2_DrawFadeScreen(void)
     quad->a = (byte)ps2ref.fade_scr_alpha;
 
     fade_scr_index = (next_in_2d_batch - 1);
-    perfcnt.draws2d++;
+    ps2_draws2d++;
 }
 
 /*
@@ -1764,7 +1881,7 @@ void PS2_DrawStretchTexImage(int x, int y, int w, int h, ps2_teximage_t * texima
     quad->b = (byte)ps2ref.ui_brightness;
     quad->a = 255;
 
-    perfcnt.draws2d++;
+    ps2_draws2d++;
 }
 
 /*

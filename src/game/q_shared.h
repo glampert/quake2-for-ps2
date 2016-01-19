@@ -20,6 +20,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 // q_shared.h -- included first by ALL program modules
 
+#ifndef Q_SHARED_H
+#define Q_SHARED_H
+
 #ifdef _WIN32
 // unknown pragmas are SUPPOSED to be ignored, but....
 #pragma warning(disable : 4244) // MIPS
@@ -209,7 +212,7 @@ int Q_stricmp(const char * s1, const char * s2);
 int Q_strcasecmp(const char * s1, const char * s2);
 int Q_strncasecmp(const char * s1, const char * s2, int n);
 
-char * va(const char * format, ...);
+char * va(const char * format, ...) __attribute__((format(printf, 1, 2)));
 
 //=============================================
 
@@ -299,8 +302,8 @@ char * Sys_FindNext(unsigned musthave, unsigned canthave);
 void Sys_FindClose(void);
 
 // this is only here so the functions in q_shared.c and q_shwin.c can link
-void Sys_Error(const char * error, ...);
-void Com_Printf(const char * msg, ...);
+void Sys_Error(const char * error, ...) __attribute__((format(printf, 1, 2)));
+void Com_Printf(const char * msg, ...) __attribute__((format(printf, 1, 2)));
 
 /*
 ==========================================================
@@ -1170,3 +1173,5 @@ typedef struct
 extern int vidref_val;
 // PGM
 // ==================
+
+#endif // Q_SHARED_H
