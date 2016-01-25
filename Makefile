@@ -304,17 +304,21 @@ run: $(BIN_TARGET)
 	$(RUN_CMD)
 
 # ---------------------------------------------------------
-#  Custom 'clean' rule:
+#  Custom 'clean' rules:
 # ---------------------------------------------------------
 
 # Using 'find' because we need to recursively clear all subdirs.
 clean:
 	$(ECHO_CLEANING)
-	$(QUIET) rm -f $(BIN_TARGET)
-	$(QUIET) rm -f $(OUTPUT_DIR)/$(IOP_OUTPUT_DIR)/*.s
-	$(QUIET) rm -f $(OUTPUT_DIR)/$(IOP_OUTPUT_DIR)/*.o
-	$(QUIET) rm -f $(OUTPUT_DIR)/$(VU_OUTPUT_DIR)/*.vsm
-	$(QUIET) rm -f $(OUTPUT_DIR)/$(VU_OUTPUT_DIR)/*.o
-	$(QUIET) rm -f $(INSTALL_PATH)/$(notdir $(BIN_TARGET))
+	$(QUIET) rm -f  $(BIN_TARGET)
+	$(QUIET) rm -f  $(OUTPUT_DIR)/$(IOP_OUTPUT_DIR)/*.s
+	$(QUIET) rm -f  $(OUTPUT_DIR)/$(IOP_OUTPUT_DIR)/*.o
+	$(QUIET) rm -rf $(OUTPUT_DIR)/$(VU_OUTPUT_DIR)
+	$(QUIET) rm -f  $(INSTALL_PATH)/$(notdir $(BIN_TARGET))
 	$(QUIET) find $(OUTPUT_DIR) -name "*.o" -type f -delete
+
+# Just clears the VU code output directory.
+clean_vu:
+	$(ECHO_CLEANING)
+	$(QUIET) rm -rf $(OUTPUT_DIR)/$(VU_OUTPUT_DIR)
 

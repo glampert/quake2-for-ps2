@@ -301,9 +301,11 @@ static void PS2_AllocRenderPackets(void)
     // very big mesh could potentially crash the renderer!
     //
 
-//    enum { FRAME_PACKET_SIZE = 65535 };
-    //FIXME temp
+    //FIXME Temp: will settle on a definite size later, but we
+    // don't need a lot since now the 3D drawing happens on the VU1.
+    // this is for the 2D drawing and a few render-states only...
     enum { FRAME_PACKET_SIZE = 65535/2 };
+    //enum { FRAME_PACKET_SIZE = 65535 };
 
     PS2_PacketAlloc(&ps2ref.frame_packets[0], FRAME_PACKET_SIZE, GS_PACKET_NORMAL);
     PS2_PacketAlloc(&ps2ref.frame_packets[1], FRAME_PACKET_SIZE, GS_PACKET_NORMAL);
@@ -436,8 +438,8 @@ Remarks: Local function.
 */
 static void PS2_ClearScreen(void)
 {
-    static qword_t temp_dma_buffer[64] __attribute__((aligned(64)));
-    qword_t * qwptr = temp_dma_buffer;
+    static qword_t scrap_dma_buffer[64] __attribute__((aligned(16)));
+    qword_t * qwptr = scrap_dma_buffer;
 
     const int width  = viddef.width;
     const int height = viddef.height;
@@ -457,28 +459,8 @@ static void PS2_ClearScreen(void)
     END_DMA_TAG(qwptr);
 
     dma_wait_fast(); // -- Wait for previous to conclude.
-    dma_channel_send_chain(DMA_CHANNEL_GIF, temp_dma_buffer, 0, DMA_FLAG_TRANSFERTAG, 0);
-
-    //TODO tidy up
-    /*
-    int width  = viddef.width;
-    int height = viddef.height;
-
-    BEGIN_DMA_TAG(ps2ref.current_frame_qwptr);
-    ps2ref.current_frame_qwptr = draw_disable_tests(ps2ref.current_frame_qwptr, 0, &ps2ref.z_buffer);
-
-    ps2ref.current_frame_qwptr =
-        draw_clear(ps2ref.current_frame_qwptr, 0,
-                   2048 - (width  / 2),
-                   2048 - (height / 2),
-                   width, height,
-                   ps2ref.screen_color.r,
-                   ps2ref.screen_color.g,
-                   ps2ref.screen_color.b);
-
-    ps2ref.current_frame_qwptr = draw_enable_tests(ps2ref.current_frame_qwptr, 0, &ps2ref.z_buffer);
-    END_DMA_TAG(ps2ref.current_frame_qwptr);
-    */
+    dma_channel_send_chain(DMA_CHANNEL_GIF, scrap_dma_buffer, 0, DMA_FLAG_TRANSFERTAG, 0);
+    dma_wait_fast(); // -- Synchronize immediately.
 }
 
 /*
@@ -1128,6 +1110,24 @@ void PS2_RendererShutdown(void)
     PS2_ModelShutdown();
     PS2_TexImageShutdown();
     PS2_MemClearObj(&ps2ref);
+}
+
+/*
+================
+PS2_WaitGSDrawFinish
+================
+*/
+void PS2_WaitGSDrawFinish(void)
+{
+    static qword_t scrap_dma_buffer[4] __attribute__((aligned(16)));
+    qword_t * qwptr = scrap_dma_buffer;
+    qwptr = draw_finish(qwptr);
+
+    dma_wait_fast(); // -- Wait for previous to conclude.
+    dma_channel_send_normal(DMA_CHANNEL_GIF, scrap_dma_buffer, (qwptr - scrap_dma_buffer), 0, 0);
+    dma_wait_fast(); // -- Synchronize immediately.
+
+    draw_wait_finish();
 }
 
 /*

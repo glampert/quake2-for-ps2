@@ -179,10 +179,10 @@ void VU1_Begin(void)
     vu1_current_buffer = vu1_dma_buffers[vu1_buffer_index];
 
     // Rest frame context:
-    vu1_local_context.offset         = 0;
     vu1_local_context.dma_size       = 0;
     vu1_local_context.cnt_dma_dest   = 0;
     vu1_local_context.is_buiding_dma = false;
+    vu1_local_context.offset         = NULL;
     vu1_local_context.kickbuffer     = vu1_current_buffer;
 }
 
@@ -228,6 +228,7 @@ void VU1_ListAddBegin(int address)
     vu1_local_context.cnt_dma_dest   = address;
     vu1_local_context.is_buiding_dma = true;
 
+    // These are placeholders filled later by VU1_ListAddEnd().
     *((u64 *)vu1_current_buffer)++ = VU1_DMA_CNT_TAG(0);
     *((u32 *)vu1_current_buffer)++ = VU1_VIF_CODE(VU1_VIF_STCYL, 0, 0x0101);
     *((u32 *)vu1_current_buffer)++ = VU1_VIF_CODE(VU1_VIF_UNPACK_V4_32, 0, 0);

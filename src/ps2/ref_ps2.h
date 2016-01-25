@@ -195,6 +195,7 @@ void PS2_AppActivate(qboolean activate);
 void PS2_PacketAlloc(ps2_gspacket_t * packet, int qwords, int type);
 void PS2_PacketFree(ps2_gspacket_t * packet);
 void PS2_PacketReset(ps2_gspacket_t * packet);
+void PS2_WaitGSDrawFinish(void);
 
 /*
 ==============================================================

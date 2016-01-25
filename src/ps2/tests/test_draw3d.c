@@ -51,24 +51,24 @@ typedef struct
 //  draw_data_t helpers
 // ---------------------
 
-static inline void DrawDataReset(draw_data_t * dd)
+static void DrawDataReset(draw_data_t * dd)
 {
     dd->ptr = dd->buffer;
 }
 
-static inline int DrawDataGetQWordSize(const draw_data_t * dd)
+static int DrawDataGetQWordSize(const draw_data_t * dd)
 {
     return (dd->ptr - dd->buffer) >> 4;
 }
 
-static inline void DrawDataAddMatrix(draw_data_t * dd, const m_mat4_t * m)
+static void DrawDataAddMatrix(draw_data_t * dd, const m_mat4_t * m)
 {
     // Copy the matrix as-is:
     memcpy(dd->ptr, m, sizeof(*m));
     dd->ptr += sizeof(*m);
 }
 
-static inline void DrawDataAddScaleFactors(draw_data_t * dd)
+static void DrawDataAddScaleFactors(draw_data_t * dd)
 {
     // GS rasterizer scale factors follow the MVP matrix:
     float * scale_vec = (float *)dd->ptr;
@@ -79,7 +79,7 @@ static inline void DrawDataAddScaleFactors(draw_data_t * dd)
     dd->ptr += sizeof(float) * 4;
 }
 
-static inline void DrawDataAddVertexCount(draw_data_t * dd, u32 vert_count, u32 dest_address)
+static void DrawDataAddVertexCount(draw_data_t * dd, u32 vert_count, u32 dest_address)
 {
     // Vertex count and output address (expanded into a quadword):
     u32 * counts = (u32 *)dd->ptr;
@@ -90,10 +90,10 @@ static inline void DrawDataAddVertexCount(draw_data_t * dd, u32 vert_count, u32 
     dd->ptr += sizeof(u32) * 4;
 }
 
-static inline int CountVertexLoops(int vertex_qwords, int num_regs)
+static int CountVertexLoops(float vertex_qwords, float num_regs)
 {
-    const float lpq = 2.0f / (float)num_regs;
-    return (int)(vertex_qwords * lpq);
+    const float loops_per_qw = 2.0f / num_regs;
+    return (int)(vertex_qwords * loops_per_qw);
 }
 
 //=============================================================================
@@ -316,11 +316,12 @@ static void DrawVU1Cube(draw_data_t * dd, const m_mat4_t * mvp, const cube_t * c
     const u64 gif_tag    = GS_GIFTAG(vert_loops, 1, 1, prim_info, GS_GIFTAG_PACKED, NUM_VERTEX_ELEMENTS);
     VU1_ListAdd128(gif_tag, VERTEX_FORMAT);
 
+    // NOTE: alpha cannot be > 0x80 (128)!
     const byte colors[4][4] = {
-        { 128,   0,   0, 255 }, // red
-        {   0, 128,   0, 255 }, // green
-        {   0,   0, 128, 255 }, // blue
-        { 128, 128,   0, 255 }  // yellow
+        { 0x80, 0x00, 0x00, 0x80 }, // red
+        { 0x00, 0x80, 0x00, 0x80 }, // green
+        { 0x00, 0x00, 0x80, 0x80 }, // blue
+        { 0x80, 0x80, 0x00, 0x80 }  // yellow
     };
 
     // Push one vertex per cube index:
@@ -351,6 +352,10 @@ static void DrawVU1Cube(draw_data_t * dd, const m_mat4_t * mvp, const cube_t * c
 
     // End the list and start the VU program (located in micromem address 0)
     VU1_End(0);
+
+    // Since we are going to draw multiple cubes, we need to synchronize before
+    // writing to the same VU1 memory address. Waiting for the GS to finish draw does the job.
+    PS2_WaitGSDrawFinish();
 }
 
 void Test_PS2_VU1Cubes(void)
