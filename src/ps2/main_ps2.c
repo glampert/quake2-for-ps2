@@ -12,19 +12,28 @@
 
 #include "common/q_common.h"
 
+// An artificial argv[] param for Qcommon_Init:
+static char * ps2_argv[] = { "QPS2.ELF", NULL };
+
 /*
 ================
 Test programs:
 ================
 */
-extern void Test_PS2_Draw2D(void);
-extern void Test_PS2_Cinematics(void);
-extern void Test_PS2_QuakeMenus(void);
-extern void Test_PS2_VU1Triangle(void);
+extern void Test_PS2_Draw2D(void);      // ps2_prog = 1
+extern void Test_PS2_Cinematics(void);  // ps2_prog = 2
+extern void Test_PS2_QuakeMenus(void);  // ps2_prog = 3
+extern void Test_PS2_VU1Triangle(void); // ps2_prog = 4
+extern void Test_PS2_VU1Cubes(void);    // ps2_prog = 5
+
+// Default value for ps2_prog CVar:
+#ifndef DEFAULT_PS2_PROG
+    #define DEFAULT_PS2_PROG "5"
+#endif // DEFAULT_PS2_PROG
 
 /*
 ================
-PS2 main() function
+PS2 main():
 ================
 */
 int main(void)
@@ -37,14 +46,12 @@ int main(void)
     FS_SetDefaultBasePath("mass:"); // Assume USB drive.
     #endif // PS2_FS_BASE_PATH
 
-    // PS2 main() takes no arguments.
-    // Fake a default program name argv[].
-    int argc = 1;
-    char * argv[] = { "QPS2.ELF" };
-    Qcommon_Init(argc, argv);
+    // PS2 main() takes no arguments so we
+    // fake a default program name argv[].
+    Qcommon_Init(1, ps2_argv);
 
     // Which "program" to run. 0 is game, following numbers are the tests.
-    cvar_t * ps2_prog = Cvar_Get("ps2_prog", "0", 0);
+    cvar_t * ps2_prog = Cvar_Get("ps2_prog", DEFAULT_PS2_PROG, 0);
 
     // Run Quake 2 normally:
     if ((int)ps2_prog->value == 0)
@@ -65,7 +72,7 @@ int main(void)
             oldtime = newtime;
         }
     }
-    else // Run a test:
+    else // Run a test instead:
     {
         switch ((int)ps2_prog->value)
         {
@@ -81,7 +88,12 @@ int main(void)
         case 4 :
             Test_PS2_VU1Triangle();
             break;
-        }
+        case 5 :
+            Test_PS2_VU1Cubes();
+            break;
+        default :
+            break;
+        } // switch (ps2_prog)
     }
 
     Sys_Quit();

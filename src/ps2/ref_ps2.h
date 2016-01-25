@@ -122,14 +122,6 @@ extern ps2_refresh_t ps2ref;
 // Imported from the colormap.pcx file.
 extern const u32 global_palette[256];
 
-// Built-in texture images that are always available:
-extern ps2_teximage_t * builtin_tex_conchars;
-extern ps2_teximage_t * builtin_tex_conback;
-extern ps2_teximage_t * builtin_tex_inventory;
-extern ps2_teximage_t * builtin_tex_help;
-extern ps2_teximage_t * builtin_tex_backtile;
-extern ps2_teximage_t * builtin_tex_debug;
-
 /*
 ==============================================================
 
@@ -161,10 +153,13 @@ struct image_s * PS2_RegisterPic(const char * name);
  * Frame rendering (3D stuff):
  */
 
+qboolean PS2_IsFrameStarted(void);
 void PS2_BeginFrame(float camera_separation);
 void PS2_EndFrame(void);
 void PS2_RenderFrame(refdef_t * view_def);
-qboolean PS2_IsFrameStarted(void);
+void PS2_DrawFrameSetup(refdef_t * view_def);
+void PS2_DrawWorldModel(refdef_t * view_def);
+void PS2_DrawViewEntities(refdef_t * view_def);
 
 /*
  * 2D overlay rendering (origin at the top-left corner of the screen):
@@ -192,6 +187,14 @@ void PS2_DrawFadeScreen(void);
 
 void PS2_CinematicSetPalette(const byte * restrict palette);
 void PS2_AppActivate(qboolean activate);
+
+/*
+ * GS render packet helpers:
+ */
+
+void PS2_PacketAlloc(ps2_gspacket_t * packet, int qwords, int type);
+void PS2_PacketFree(ps2_gspacket_t * packet);
+void PS2_PacketReset(ps2_gspacket_t * packet);
 
 /*
 ==============================================================
@@ -257,10 +260,5 @@ ps2_teximage_t * Img_ScrapAlloc(const byte * pic8in, int w, int h, const char * 
 // Resize the input RGBA image using a box filter. Output and input must point to different buffers.
 void Img_Resample32(const u32 * restrict in_img, int in_width, int in_height,
                     u32 * restrict out_img, int out_width, int out_height);
-
-// GS render packet helpers:
-void PS2_PacketAlloc(ps2_gspacket_t * packet, int qwords, int type);
-void PS2_PacketFree(ps2_gspacket_t * packet);
-void PS2_PacketReset(ps2_gspacket_t * packet);
 
 #endif // PS2_REFRESH_H

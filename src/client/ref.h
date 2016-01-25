@@ -54,21 +54,15 @@ typedef struct entity_s
     struct model_s * model; // opaque type outside refresh
     float angles[3];
 
-    /*
-	** most recent data
-	*/
+	// most recent data:
     float origin[3]; // also used as RF_BEAM's "from"
     int frame;       // also used as RF_BEAM's diameter
 
-    /*
-	** previous data for lerping
-	*/
+	// previous data for lerping:
     float oldorigin[3]; // also used as RF_BEAM's "to"
     int oldframe;
 
-    /*
-	** misc
-	*/
+	// misc:
     float backlerp; // 0.0 = current, 1.0 = old
     int skinnum;    // also used as RF_BEAM's palette index
 
@@ -101,18 +95,18 @@ typedef struct
 
 typedef struct
 {
-    int x, y, width, height; // in virtual screen coordinates
-    float fov_x, fov_y;
-    float vieworg[3];
-    float viewangles[3];
-    float blend[4]; // rgba 0-1 full screen blend
-    float time;     // time is uesed to auto animate
-    int rdflags;    // RDF_UNDERWATER, etc
+    int x, y, width, height;    // in virtual screen coordinates
+    float fov_x, fov_y;         // field of view
+    float vieworg[3];           // viewer origin
+    float viewangles[3];        // viewer rotation angles
+    float blend[4];             // rgba 0-1 full screen blend (for R_Flash)
+    float time;                 // time is used to auto animate
+    int rdflags;                // RDF_NOWORLDMODEL, RDF_UNDERWATER, etc
 
-    byte * areabits; // if not NULL, only areas with set bits will be drawn
-
+    byte * areabits;            // if not NULL, only areas with set bits will be drawn
     lightstyle_t * lightstyles; // [MAX_LIGHTSTYLES]
 
+    // Non-world geometry:
     int num_entities;
     entity_t * entities;
 

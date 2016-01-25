@@ -328,14 +328,14 @@ Hunk_BlockAlloc
 */
 byte * Hunk_BlockAlloc(mem_hunk_t * hunk, int block_size)
 {
-    // This is the way Quake2 does it, so I ain't changing it...
+    // LAMPERT: This is the way Quake2 does it, so I ain't changing it...
     block_size = (block_size + 31) & ~31; // round to cacheline
 
     // The hunk stack doesn't resize.
     hunk->curr_size += block_size;
     if (hunk->curr_size > hunk->max_size)
     {
-        Sys_Error("Hunk_BlockAlloc: Overflowed with %d bytes request!", block_size);
+        Sys_Error("Hunk_BlockAlloc: Overflowed with %s request!", PS2_FormatMemoryUnit(block_size, true));
     }
 
     return hunk->base_ptr + hunk->curr_size - block_size;

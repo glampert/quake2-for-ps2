@@ -35,6 +35,7 @@
 #define VU1_VIF_MPG    0x4A
 #define VU1_VIF_MSCAL  0x14
 #define VU1_VIF_STCYL  0x01
+#define VU1_VIF_FLUSH  0x11
 #define VU1_VIF_UNPACK 0x60
 #define VU1_VIF_UNPACK_V4_32 (VU1_VIF_UNPACK | 0x0C)
 #define VU1_VIF_CODE(CMD, NUM, IMMEDIATE) ((((u32)(CMD)) << 24) | (((u32)(NUM)) << 16) | ((u32)(IMMEDIATE)))
@@ -55,11 +56,11 @@ static byte *        vu1_current_buffer;
 static byte *        vu1_dma_buffers[2] __attribute__((aligned(16)));
 static vu1_context_t vu1_local_context  __attribute__((aligned(16)));
 
-// Wait time for the VIF DMAs. Arbitrary value.
-static const int VU1_DMA_CHAN_TIMEOUT = 999999;
+// Wait time for the VIF DMAs: -1 no time out. Wait till finished.
+static const int VU1_DMA_CHAN_TIMEOUT = -1;
 
-// We have two buffers of this size for the VU DMAs.
-static const int VU1_DMA_BUFFER_SIZE_BYTES = 100 * 1024; // 100KB
+// We have two buffers of this size for the VIF DMAs.
+static const int VU1_DMA_BUFFER_SIZE_BYTES = 512 * 1024; // 1MB for both
 
 //=============================================================================
 
@@ -137,6 +138,7 @@ void VU1_UploadProg(int dest, void * start, void * end)
     // We can use one of the DMA buffers for the program upload,
     // since we synchronize immediately after the upload.
     byte * chain = vu1_dma_buffers[0];
+    dma_channel_wait(DMA_CHANNEL_VIF1, VU1_DMA_CHAN_TIMEOUT); // Finish any pending transfers first.
 
     // Get the size of the code as we can only send 256 instructions in each MPG tag.
     int count = VU1_CodeSize(start, end);
@@ -159,7 +161,6 @@ void VU1_UploadProg(int dest, void * start, void * end)
 
     // Send it to VIF1:
     FlushCache(0);
-    dma_channel_wait(DMA_CHANNEL_VIF1, VU1_DMA_CHAN_TIMEOUT); // Finish any pending transfers first.
     dma_channel_send_chain(DMA_CHANNEL_VIF1, vu1_dma_buffers[0], 0, DMA_FLAG_TRANSFERTAG, 0);
     dma_channel_wait(DMA_CHANNEL_VIF1, VU1_DMA_CHAN_TIMEOUT); // Synchronize immediately.
 }
@@ -193,10 +194,10 @@ VU1_End
 void VU1_End(int start)
 {
     *((u64 *)vu1_current_buffer)++ = VU1_DMA_END_TAG(0);
-    *((u32 *)vu1_current_buffer)++ = VU1_VIF_CODE(VU1_VIF_NOP, 0, 0);
 
     if (start >= 0)
     {
+        *((u32 *)vu1_current_buffer)++ = VU1_VIF_CODE(VU1_VIF_FLUSH, 0, 0);
         *((u32 *)vu1_current_buffer)++ = VU1_VIF_CODE(VU1_VIF_MSCAL, 0, start);
     }
     else
@@ -248,7 +249,7 @@ void VU1_ListAddEnd(void)
     while (vu1_local_context.dma_size & 0xF)
     {
         *((u32 *)vu1_current_buffer)++ = 0;
-        vu1_local_context.dma_size += 4;
+        vu1_local_context.dma_size += sizeof(u32);
     }
 
     const int dma_size_qwords = vu1_local_context.dma_size >> 4;
@@ -290,7 +291,7 @@ void VU1_ListAdd128(u64 v1, u64 v2)
 
     *((u64 *)vu1_current_buffer)++ = v1;
     *((u64 *)vu1_current_buffer)++ = v2;
-    vu1_local_context.dma_size += 16;
+    vu1_local_context.dma_size += sizeof(u64) * 2;
 }
 
 /*
@@ -306,7 +307,7 @@ void VU1_ListAdd64(u64 v)
     }
 
     *((u64 *)vu1_current_buffer)++ = v;
-    vu1_local_context.dma_size += 8;
+    vu1_local_context.dma_size += sizeof(u64);
 }
 
 /*
@@ -322,7 +323,7 @@ void VU1_ListAdd32(u32 v)
     }
 
     *((u32 *)vu1_current_buffer)++ = v;
-    vu1_local_context.dma_size += 4;
+    vu1_local_context.dma_size += sizeof(u32);
 }
 
 /*
@@ -338,5 +339,5 @@ void VU1_ListAddFloat(float v)
     }
 
     *((float *)vu1_current_buffer)++ = v;
-    vu1_local_context.dma_size += 4;
+    vu1_local_context.dma_size += sizeof(float);
 }

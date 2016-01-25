@@ -25,11 +25,12 @@ SRC_FILES = \
 	ps2/main_ps2.c          \
 	ps2/math_funcs.c        \
 	ps2/mem_alloc.c         \
-	ps2/model.c             \
+	ps2/model_load.c        \
 	ps2/net_ps2.c           \
 	ps2/ref_ps2.c           \
 	ps2/sys_ps2.c           \
 	ps2/tex_image.c         \
+	ps2/view_draw.c         \
 	ps2/vec_mat.c           \
 	ps2/vid_ps2.c           \
 	ps2/vu1.c               \
@@ -131,7 +132,7 @@ IRX_FILES = usbd.irx
 # VCL/VU microprograms:
 #
 VCL_PATH  = src/ps2/vu1progs
-VCL_FILES = test_triangle.vcl
+VCL_FILES = color_triangles.vcl
 
 # ---------------------------------------------------------
 #  Libs from the PS2DEV SDK:
@@ -194,10 +195,14 @@ PS2_CC = ee-gcc
 PS2_VU_DVP = dvp-as
 
 #
-# Vector Command Line preprocessor:
+# openvcl = Vector Command Line preprocessor.
 # (get it at: https://github.com/jsvennevid/openvcl)
 #
-PS2_VCL = openvcl
+# vclpp = Simple preprocessor I wrote to help, since VCL doesn't handle #defines and macros.
+# (get it at: https://github.com/glampert/vclpp)
+#
+PS2_VCL   = openvcl
+PS2_VCLPP = vclpp
 
 #
 # Linker stuff:
@@ -275,7 +280,8 @@ $(VU_PROGS): $(OUTPUT_DIR)/$(VU_OUTPUT_DIR)/%.o: $(OUTPUT_DIR)/$(VU_OUTPUT_DIR)/
 
 $(OUTPUT_DIR)/$(VU_OUTPUT_DIR)/%.vsm:
 	$(QUIET) $(MKDIR_CMD) $(dir $@)
-	$(QUIET) $(PS2_VCL) -o $@ $(VCL_PATH)/$*.vcl
+	$(QUIET) $(PS2_VCLPP) $(VCL_PATH)/$*.vcl $(dir $@)$*.pp.vcl -j
+	$(QUIET) $(PS2_VCL) -o $@ $(dir $@)$*.pp.vcl
 
 # ---------------------------------------------------------
 #  Custom 'run' rule:

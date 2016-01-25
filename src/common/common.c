@@ -1465,11 +1465,11 @@ void Qcommon_Init(int argc, char ** argv)
     showtrace = Cvar_Get("showtrace", "0", 0);
     logfile_active = Cvar_Get("logfile", "0", 0);
 
-#ifdef DEDICATED_ONLY
+    #ifdef DEDICATED_ONLY
     dedicated = Cvar_Get("dedicated", "1", CVAR_NOSET);
-#else
+    #else // !DEDICATED_ONLY
     dedicated = Cvar_Get("dedicated", "0", CVAR_NOSET);
-#endif
+    #endif // DEDICATED_ONLY
 
     s = va("%4.2f %s %s %s", VERSION, CPUSTRING, __DATE__, BUILDSTRING);
     Com_DPrintf("Version: %s\n", s);
@@ -1487,6 +1487,7 @@ void Qcommon_Init(int argc, char ** argv)
     SV_Init();
     CL_Init();
 
+    /*
     // add + commands from command line
     if (!Cbuf_AddLateCommands())
     {
@@ -1507,6 +1508,10 @@ void Qcommon_Init(int argc, char ** argv)
         // so drop the loading plaque
         SCR_EndLoadingPlaque();
     }
+    */
+    //FIXME this is for temporary testing only! Restore the above once done!
+    Cbuf_AddText("killserver ; maxclients 1 ; deathmatch 0 ; map idlog.cin+fact3\n");
+    Cbuf_Execute();
 
     Com_Printf("---- Quake II Initialized! ----\n");
 }

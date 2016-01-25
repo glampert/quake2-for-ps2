@@ -13,7 +13,7 @@
 #include "common/q_common.h"
 #include "ps2/ref_ps2.h"
 #include "ps2/mem_alloc.h"
-#include "ps2/model.h"
+#include "ps2/model_load.h"
 #include "ps2/vu1.h"
 
 // PS2DEV SDK:
@@ -36,13 +36,14 @@ static int ps2_tex_uploads  = 0;
 static int ps2_pipe_flushes = 0;
 
 // Config vars:
-static cvar_t * r_ps2_vid_width         = NULL;
-static cvar_t * r_ps2_vid_height        = NULL;
-static cvar_t * r_ps2_ui_brightness     = NULL;
-static cvar_t * r_ps2_fade_scr_alpha    = NULL;
-static cvar_t * r_ps2_show_fps          = NULL;
-static cvar_t * r_ps2_show_mem_tags     = NULL;
-static cvar_t * r_ps2_show_render_stats = NULL;
+static cvar_t * r_ps2_vid_width         = NULL; // Horizontal video resolution in pixels.
+static cvar_t * r_ps2_vid_height        = NULL; // Vertical video resolution in pixels.
+static cvar_t * r_ps2_ui_brightness     = NULL; // UI brightness adjustment from 0 to 255. Default to 128.
+static cvar_t * r_ps2_fade_scr_alpha    = NULL; // Fade screen opacity from 0 to 255. Defaults to 100.
+static cvar_t * r_ps2_show_fps          = NULL; // Show FPS counter and frame times on screen; "1" by default.
+static cvar_t * r_ps2_show_mem_tags     = NULL; // Show memory usage on screen; "1" by default.
+static cvar_t * r_ps2_show_render_stats = NULL; // Show renderer statistics, like models/textures loaded; "1" by default.
+static cvar_t * r_ps2_skip_render_frame = NULL; // Skips PS2_RenderFrame() entirely; "0" by default.
 
 // Average multiple frames together to smooth changes out a bit.
 enum { MAX_FPS_HIST = 4 };
@@ -109,6 +110,14 @@ static u32 cinematic_palette[256] __attribute__((aligned(16)));
 // and blitted to screen using a full-screen quadrilateral
 // that applies this buffer as texture.
 static u16 cinematic_buffer[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
+
+// Built-in texture images that are always available (defined in tex_image.c):
+extern ps2_teximage_t * builtin_tex_conchars;
+extern ps2_teximage_t * builtin_tex_conback;
+extern ps2_teximage_t * builtin_tex_inventory;
+extern ps2_teximage_t * builtin_tex_help;
+extern ps2_teximage_t * builtin_tex_backtile;
+extern ps2_teximage_t * builtin_tex_debug;
 
 //=============================================================================
 //
@@ -291,7 +300,11 @@ static void PS2_AllocRenderPackets(void)
     // NOTE: Currently no overflow checking is done, so drawing a
     // very big mesh could potentially crash the renderer!
     //
-    enum { FRAME_PACKET_SIZE = 65535 };
+
+//    enum { FRAME_PACKET_SIZE = 65535 };
+    //FIXME temp
+    enum { FRAME_PACKET_SIZE = 65535/2 };
+
     PS2_PacketAlloc(&ps2ref.frame_packets[0], FRAME_PACKET_SIZE, GS_PACKET_NORMAL);
     PS2_PacketAlloc(&ps2ref.frame_packets[1], FRAME_PACKET_SIZE, GS_PACKET_NORMAL);
 
@@ -426,8 +439,8 @@ static void PS2_ClearScreen(void)
     static qword_t temp_dma_buffer[64] __attribute__((aligned(64)));
     qword_t * qwptr = temp_dma_buffer;
 
-    int width  = viddef.width;
-    int height = viddef.height;
+    const int width  = viddef.width;
+    const int height = viddef.height;
 
     BEGIN_DMA_TAG(qwptr);
     qwptr = draw_disable_tests(qwptr, 0, &ps2ref.z_buffer);
@@ -1005,6 +1018,7 @@ qboolean PS2_RendererInit(void * unused1, void * unused2)
     r_ps2_show_fps           = Cvar_Get("r_ps2_show_fps",          "1",   0);
     r_ps2_show_mem_tags      = Cvar_Get("r_ps2_show_mem_tags",     "1",   0);
     r_ps2_show_render_stats  = Cvar_Get("r_ps2_show_render_stats", "1",   0);
+    r_ps2_skip_render_frame  = Cvar_Get("r_ps2_skip_render_frame", "0",   0);
 
     // Cache these, since on the PS2 we don't have a way of interacting with the console.
     viddef.width             = (int)r_ps2_vid_width->value;
@@ -1316,13 +1330,32 @@ PS2_RenderFrame
 void PS2_RenderFrame(refdef_t * view_def)
 {
     CHECK_FRAME_STARTED();
+    if (view_def == NULL)
+    {
+        Sys_Error("Null view_def in PS2_RenderFrame!");
+    }
+
+    // You can skip 3D frame rendering for profiling/testing.
+    if (r_ps2_skip_render_frame->value)
+    {
+        return;
+    }
+
+    // A world map should have been loaded already by BeginRegistration().
+    if (PS2_ModelGetWorld() == NULL && !(view_def->rdflags & RDF_NOWORLDMODEL))
+    {
+        Sys_Error("PS2_RenderFrame: Null world model!");
+    }
+
     //
-    // Quake2 default render mode was 2D, only switching to 3D in here
+    // Trivia:
+    // Quake 2 default render mode was 2D, only switching to 3D in here
     // (probably in account of the software renderer).
     //
 
-    (void)view_def;
-    //TODO
+    PS2_DrawFrameSetup(view_def);
+    PS2_DrawWorldModel(view_def);
+    PS2_DrawViewEntities(view_def);
 }
 
 /*

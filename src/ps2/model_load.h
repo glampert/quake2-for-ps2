@@ -1,7 +1,7 @@
 
 /* ================================================================================================
  * -*- C -*-
- * File: model.h
+ * File: model_load.h
  * Author: Guilherme R. Lampert
  * Created on: 29/10/15
  * Brief: Declarations related to 3D model loading and handling for entities and world/level.
@@ -69,14 +69,14 @@ typedef struct ps2_mdl_sub_s
     int vis_leafs;
     int first_face;
     int num_faces;
-} ps2_mdl_sub_t;
+} ps2_mdl_submod_t;
 
 /*
  * Edge description:
  */
 typedef struct ps2_mdl_edge_s
 {
-    u16 v[2]; // vertex numbers
+    u16 v[2]; // vertex numbers/indexes
     u32 cached_edge_offset;
 } ps2_mdl_edge_t;
 
@@ -226,7 +226,7 @@ typedef struct ps2_model_s
     int lightmap; // Only for submodels
 
     int num_submodels;
-    ps2_mdl_sub_t * submodels;
+    ps2_mdl_submod_t * submodels;
 
     int num_planes;
     cplane_t * planes;
@@ -295,11 +295,13 @@ ps2_model_t * PS2_ModelAlloc(void);
 ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags);
 
 // Loads the world model used by the current level the game wants.
-// The returned pointer points to an internal shared instance, so
-// only one world model is allowed at any time.
+// Only one world model is allowed at any time.
 void PS2_ModelLoadWorld(const char * name);
 
-// Frees a model previously acquired from FindOrLoad.
+// Get the currently loaded world model instance.
+ps2_model_t * PS2_ModelGetWorld(void);
+
+// Frees a model previously acquired from ModelFindOrLoad.
 void PS2_ModelFree(ps2_model_t * mdl);
 
 // Called by EndRegistration() to free models not referenced by the new level.
