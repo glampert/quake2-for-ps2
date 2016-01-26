@@ -111,15 +111,15 @@ write files over areas they shouldn't.
 FS_filelength
 ================
 */
-int FS_filelength(FILE * f)
+int FS_filelength(FILE * fp)
 {
     int pos;
     int end;
 
-    pos = ftell(f);
-    fseek(f, 0, SEEK_END);
-    end = ftell(f);
-    fseek(f, pos, SEEK_SET);
+    pos = ftell(fp);
+    fseek(fp, 0, SEEK_END);
+    end = ftell(fp);
+    fseek(fp, pos, SEEK_SET);
 
     return end;
 }
@@ -154,9 +154,9 @@ For some reason, other dll's can't just cal fclose()
 on files returned by FS_FOpenFile...
 ==============
 */
-void FS_FCloseFile(FILE * f)
+void FS_FCloseFile(FILE * fp)
 {
-    fclose(f);
+    fclose(fp);
 }
 
 // RAFAEL
@@ -359,13 +359,20 @@ int FS_FOpenFile(const char * filename, FILE ** file)
 
 /*
 =================
-FS_ReadFile
+FS_Read
 
 Properly handles partial reads
 =================
 */
-void FS_Read(void * buffer, int len, FILE * f)
+void FS_Read(void * buffer, int len, FILE * fp)
 {
+    //
+    // LAMPERT 2016-01-26:
+    // Added the unchunked file reading code to
+    // speed up testing on the PS2 from a USB drive.
+    //
+#ifdef FS_CHUNKED_FILE_READ
+
     extern void CDAudio_Stop(void);
     enum
     {
@@ -390,7 +397,7 @@ void FS_Read(void * buffer, int len, FILE * f)
             block = MAX_READ;
         }
 
-        read = fread(buf, 1, block, f);
+        read = fread(buf, 1, block, fp);
         if (read == 0)
         {
             // we might have been trying to read from a CD
@@ -411,10 +418,20 @@ void FS_Read(void * buffer, int len, FILE * f)
         }
 
         // do some progress bar thing here...
-
         remaining -= read;
         buf += read;
     }
+
+#else // !FS_CHUNKED_FILE_READ
+
+    const size_t num_read = fread(buffer, 1, len, fp);
+    if (num_read != (size_t)len)
+    {
+        Com_Error(ERR_FATAL, "FS_Read: Unable to read requested size! Asked %u, got %u",
+                  (unsigned)len, (unsigned)num_read);
+    }
+
+#endif // FS_CHUNKED_FILE_READ
 }
 
 /*

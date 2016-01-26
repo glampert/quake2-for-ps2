@@ -50,10 +50,10 @@ enum { MAX_FPS_HIST = 4 };
 static struct
 {
     int index;
-    int fps_count;
+    int count;
     int previous_time;
     int times_hist[MAX_FPS_HIST];
-} fps;
+} ps2_fps_counter;
 
 //
 // All 2D draw calls are batched and flushed at the end of each frame.
@@ -68,28 +68,28 @@ typedef struct
     u16 u0, v0;
     u16 u1, v1;
     byte r, g, b, a;
-} screen_quad_t;
+} ps2_screen_quad_t;
 
 enum
 {
-    DRAW2D_BATCH_SIZE         =  8500, // size of draw2d_batch[] in elements
+    DRAW2D_BATCH_SIZE         =  8500, // size of ps2_draw2d_batch[] in elements
     DRAW2D_TEX_INDEX_NO_TEX   = -1,    // used by quad->tex_index for non-textured quads
     DRAW2D_TEX_INDEX_FADE_SCR = -2     // dummy value for DrawFadeScreen tex_index
 };
 
-// Sequential z-index for 2D primitives added to the draw2d_batch[].
-static u16 next_z_index_2d = 0;
-#define DRAW2D_NEXT_Z_INDEX() (next_z_index_2d++)
+// Sequential z-index for 2D primitives added to the ps2_draw2d_batch[].
+static u16 ps2_next_z_index_2d = 0;
+#define DRAW2D_NEXT_Z_INDEX() (ps2_next_z_index_2d++)
 
-// Set if there's a full screen overlay for this frame (index into draw2d_batch).
+// Set if there's a full screen overlay for this frame (index into ps2_draw2d_batch).
 // We only allow one per frame, and that's all Quake2 needs!
 // -1 if no fade screen/full screen wipe this frame.
-static int fade_scr_index = -1;
+static int ps2_fade_scr_index = -1;
 
 // 2D draw calls are always batched to try avoiding unnecessary texture switches.
-static int next_in_2d_batch = 0;
-static screen_quad_t draw2d_batch[DRAW2D_BATCH_SIZE] __attribute__((aligned(16)));
-#define DRAW2D_NEXT_BATCH_ELEMENT() (&draw2d_batch[next_in_2d_batch++])
+static int ps2_next_in_2d_batch = 0;
+static ps2_screen_quad_t ps2_draw2d_batch[DRAW2D_BATCH_SIZE] __attribute__((aligned(16)));
+#define DRAW2D_NEXT_BATCH_ELEMENT() (&ps2_draw2d_batch[ps2_next_in_2d_batch++])
 
 //
 // Quake2 cinematics.
@@ -101,23 +101,23 @@ static struct
     int w, h;
     ps2_teximage_t * teximage;
     qboolean draw_pending;
-} cinematic_frame;
+} ps2_cinematic_frame;
 
 // Palette provided by the game to expand 8bit cinematic frames.
-static u32 cinematic_palette[256] __attribute__((aligned(16)));
+static u32 ps2_cinematic_palette[256] __attribute__((aligned(16)));
 
 // Cinematic frames are rendered into this RGB16 texture
 // and blitted to screen using a full-screen quadrilateral
 // that applies this buffer as texture.
-static u16 cinematic_buffer[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
+static u16 ps2_cinematic_buffer[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
 
 // Built-in texture images that are always available (defined in tex_image.c):
-extern ps2_teximage_t * builtin_tex_conchars;
-extern ps2_teximage_t * builtin_tex_conback;
-extern ps2_teximage_t * builtin_tex_inventory;
-extern ps2_teximage_t * builtin_tex_help;
-extern ps2_teximage_t * builtin_tex_backtile;
-extern ps2_teximage_t * builtin_tex_debug;
+extern ps2_teximage_t * ps2_builtin_tex_conchars;
+extern ps2_teximage_t * ps2_builtin_tex_conback;
+extern ps2_teximage_t * ps2_builtin_tex_inventory;
+extern ps2_teximage_t * ps2_builtin_tex_help;
+extern ps2_teximage_t * ps2_builtin_tex_backtile;
+extern ps2_teximage_t * ps2_builtin_tex_debug;
 
 //=============================================================================
 //
@@ -540,7 +540,7 @@ enum elem2d_type
     ELEM_2D_COLOR_ONLY,
     ELEM_2D_FADE_SCR
 };
-static qword_t * PS2_Draw2DAddToPacket(qword_t * qwptr, const screen_quad_t * quad, enum elem2d_type type)
+static qword_t * PS2_Draw2DAddToPacket(qword_t * qwptr, const ps2_screen_quad_t * quad, enum elem2d_type type)
 {
     rect_t rect;
     texrect_t texrect;
@@ -662,8 +662,8 @@ Remarks: Local function.
 */
 static int PS2_Draw2DBatchSortPredicate(const void * a, const void * b)
 {
-    const screen_quad_t * q1 = (const screen_quad_t *)a;
-    const screen_quad_t * q2 = (const screen_quad_t *)b;
+    const ps2_screen_quad_t * q1 = (const ps2_screen_quad_t *)a;
+    const ps2_screen_quad_t * q2 = (const ps2_screen_quad_t *)b;
 
     // Group by texture:
     int result = q1->tex_index - q2->tex_index;
@@ -685,7 +685,7 @@ PS2_SortAndDraw2DElements
 Remarks: Local function.
 ================
 */
-static void PS2_SortAndDraw2DElements(screen_quad_t * batch, int batch_size)
+static void PS2_SortAndDraw2DElements(ps2_screen_quad_t * batch, int batch_size)
 {
     if (batch_size <= 0)
     {
@@ -693,7 +693,7 @@ static void PS2_SortAndDraw2DElements(screen_quad_t * batch, int batch_size)
     }
 
     // Sort by texture, so we only switch once per texture image:
-    qsort(batch, batch_size, sizeof(screen_quad_t), &PS2_Draw2DBatchSortPredicate);
+    qsort(batch, batch_size, sizeof(ps2_screen_quad_t), &PS2_Draw2DBatchSortPredicate);
 
     // Non-textured elements draw first. Since those have negative
     // tex_index, they are at the front of the sorted batch.
@@ -701,7 +701,7 @@ static void PS2_SortAndDraw2DElements(screen_quad_t * batch, int batch_size)
 
     int i;
     enum elem2d_type quad_type;
-    const screen_quad_t * quad;
+    const ps2_screen_quad_t * quad;
 
     for (i = 0; i < batch_size; ++i)
     {
@@ -740,14 +740,14 @@ Remarks: Local function.
 */
 static void PS2_Flush2DBatch(void)
 {
-    if (next_in_2d_batch == 0)
+    if (ps2_next_in_2d_batch == 0)
     {
         return; // Nothing this frame.
     }
 
-    if (next_in_2d_batch > DRAW2D_BATCH_SIZE)
+    if (ps2_next_in_2d_batch > DRAW2D_BATCH_SIZE)
     {
-        Sys_Error("PS2_Flush2DBatch: Bad next_in_2d_batch value!!!");
+        Sys_Error("PS2_Flush2DBatch: Bad ps2_next_in_2d_batch value!!!");
     }
 
     //
@@ -771,30 +771,30 @@ static void PS2_Flush2DBatch(void)
     //   it and one above.
     //
 
-    if (fade_scr_index < 0)
+    if (ps2_fade_scr_index < 0)
     {
-        PS2_SortAndDraw2DElements(draw2d_batch, next_in_2d_batch);
+        PS2_SortAndDraw2DElements(ps2_draw2d_batch, ps2_next_in_2d_batch);
     }
     else // Has one screen fade/wipe, split the batch:
     {
         // Things under the fade overlay:
-        PS2_SortAndDraw2DElements(draw2d_batch, fade_scr_index);
+        PS2_SortAndDraw2DElements(ps2_draw2d_batch, ps2_fade_scr_index);
 
         // Draw the overlay:
         ps2ref.current_frame_qwptr = PS2_Draw2DAddToPacket(
                                         ps2ref.current_frame_qwptr,
-                                        &draw2d_batch[fade_scr_index],
+                                        &ps2_draw2d_batch[ps2_fade_scr_index],
                                         ELEM_2D_FADE_SCR);
 
         // Elements on top of the fade overlay:
-        PS2_SortAndDraw2DElements(draw2d_batch + fade_scr_index + 1,
-                                  next_in_2d_batch - (fade_scr_index + 1));
+        PS2_SortAndDraw2DElements(ps2_draw2d_batch + ps2_fade_scr_index + 1,
+                                  ps2_next_in_2d_batch - (ps2_fade_scr_index + 1));
     }
 
     // Done! Reset for next frame:
-    next_z_index_2d  =  0;
-    next_in_2d_batch =  0;
-    fade_scr_index   = -1;
+    ps2_next_z_index_2d  =  0;
+    ps2_next_in_2d_batch =  0;
+    ps2_fade_scr_index   = -1;
 }
 
 /*
@@ -810,17 +810,17 @@ static void PS2_DrawFullScreenCinematic(void)
 
     // Cinematic are not filling the screen properly on my tests...
     // Adding these hackish offsets for now.
-    texrect.v0.x = cinematic_frame.x - 1;
-    texrect.v0.y = cinematic_frame.y - 1;
-    texrect.v1.x = cinematic_frame.x + cinematic_frame.w + 1;
-    texrect.v1.y = cinematic_frame.y + cinematic_frame.h + 45;
+    texrect.v0.x = ps2_cinematic_frame.x - 1;
+    texrect.v0.y = ps2_cinematic_frame.y - 1;
+    texrect.v1.x = ps2_cinematic_frame.x + ps2_cinematic_frame.w + 1;
+    texrect.v1.y = ps2_cinematic_frame.y + ps2_cinematic_frame.h + 45;
     texrect.v0.z = 0xFFFFFFFF;
     texrect.v1.z = 0xFFFFFFFF;
 
     texrect.t0.u = 0;
     texrect.t0.v = 0;
-    texrect.t1.u = cinematic_frame.teximage->width;
-    texrect.t1.v = cinematic_frame.teximage->height;
+    texrect.t1.u = ps2_cinematic_frame.teximage->width;
+    texrect.t1.v = ps2_cinematic_frame.teximage->height;
 
     texrect.color.r = (byte)ps2ref.ui_brightness;
     texrect.color.g = (byte)ps2ref.ui_brightness;
@@ -828,7 +828,7 @@ static void PS2_DrawFullScreenCinematic(void)
     texrect.color.a = (byte)ps2ref.ui_brightness;
     texrect.color.q = 1.0f;
 
-    PS2_TexImageVRamUpload(cinematic_frame.teximage);
+    PS2_TexImageVRamUpload(ps2_cinematic_frame.teximage);
     PS2_TexImageBindCurrent();
 
     ps2ref.current_frame_qwptr = draw_rect_textured(
@@ -840,7 +840,7 @@ static void PS2_DrawFullScreenCinematic(void)
     PS2_FlushPipeline();
     BEGIN_DMA_TAG_NAMED(ps2ref.dmatag_draw2d, ps2ref.current_frame_qwptr);
 
-    cinematic_frame.draw_pending = false;
+    ps2_cinematic_frame.draw_pending = false;
 }
 
 /*
@@ -854,18 +854,18 @@ Remarks: Local function.
 static void PS2_DrawFPSCounter(void)
 {
     int time_millisec = Sys_Milliseconds(); // Real time clock
-    int frame_time = time_millisec - fps.previous_time;
+    int frame_time = time_millisec - ps2_fps_counter.previous_time;
 
-    fps.times_hist[fps.index++] = frame_time;
-    fps.previous_time = time_millisec;
+    ps2_fps_counter.times_hist[ps2_fps_counter.index++] = frame_time;
+    ps2_fps_counter.previous_time = time_millisec;
 
     // Average our time history when we get enough samples:
-    if (fps.index == MAX_FPS_HIST)
+    if (ps2_fps_counter.index == MAX_FPS_HIST)
     {
         int i, total = 0;
         for (i = 0; i < MAX_FPS_HIST; ++i)
         {
-            total += fps.times_hist[i];
+            total += ps2_fps_counter.times_hist[i];
         }
 
         if (total == 0)
@@ -873,14 +873,14 @@ static void PS2_DrawFPSCounter(void)
             total = 1;
         }
 
-        fps.fps_count = (10000 * MAX_FPS_HIST / total);
-        fps.fps_count = (fps.fps_count + 5) / 10;
-        fps.index = 0;
+        ps2_fps_counter.count = (10000 * MAX_FPS_HIST / total);
+        ps2_fps_counter.count = (ps2_fps_counter.count + 5) / 10;
+        ps2_fps_counter.index = 0;
     }
 
     // Draw it at the top-right corner of the screen:
     PS2_DrawFill(viddef.width - 65, 3, viddef.width - 10, 15, 0); // A black bg to give the text more contrast.
-    PS2_DrawString(viddef.width - 60, 6, va("FPS %u", fps.fps_count));
+    PS2_DrawString(viddef.width - 60, 6, va("FPS %u", ps2_fps_counter.count));
 }
 
 //===============================================
@@ -949,24 +949,34 @@ static void PS2_DrawRenderStats(void)
     extern int ps2_inline_models_used;
     extern int ps2_models_failed;
 
+    extern int ps2_model_load_fs_time;
+    extern int ps2_model_load_world_time;
+    extern int ps2_model_load_ents_time;
+
     extern int ps2_teximages_used;
     extern int ps2_teximage_cache_hits;
     extern int ps2_unused_teximages_freed;
     extern int ps2_teximages_failed;
+    extern int ps2_teximage_load_time;
 
     draw_stats_old_y = draw_stats_curr_y;
-    Stats_Print("--------------------");
 
+    Stats_Print("--------------------");
     Stats_Print(va("MDL loaded     %d", ps2_model_pool_used));
     Stats_Print(va("MDL inline     %d", ps2_inline_models_used));
     Stats_Print(va("MDL cache hit  %d", ps2_model_cache_hits));
     Stats_Print(va("MDL freed      %d", ps2_unused_models_freed));
     Stats_Print(va("MDL failed     %d", ps2_models_failed));
-
     Stats_Print(va("TEX loaded     %d", ps2_teximages_used));
     Stats_Print(va("TEX cache hits %d", ps2_teximage_cache_hits));
     Stats_Print(va("TEX freed      %d", ps2_unused_teximages_freed));
     Stats_Print(va("TEX failed     %d", ps2_teximages_failed));
+    Stats_Print("--------------------");
+    Stats_Print(va("Load MDL FS %.2f s", ps2_msec_to_sec(ps2_model_load_fs_time)));
+    Stats_Print(va("Load WORLD  %.2f s", ps2_msec_to_sec(ps2_model_load_world_time)));
+    Stats_Print(va("Load ENTS   %.2f s", ps2_msec_to_sec(ps2_model_load_ents_time)));
+    Stats_Print(va("Load TEX    %.2f s", ps2_msec_to_sec(ps2_teximage_load_time)));
+    Stats_Print("--------------------");
 
     // A darker background to give the text more contrast.
     Stats_DrawBackground();
@@ -1032,7 +1042,7 @@ qboolean PS2_RendererInit(void * unused1, void * unused2)
     ps2ref.current_frame_qwptr   = NULL;
     ps2ref.dmatag_draw2d         = NULL;
     ps2ref.current_tex           = NULL;
-    memset(&fps, 0, sizeof(fps));
+    memset(&ps2_fps_counter, 0, sizeof(ps2_fps_counter));
 
     // Default clear color is black.
     ps2ref.screen_color.r = 0;
@@ -1047,11 +1057,11 @@ qboolean PS2_RendererInit(void * unused1, void * unused2)
     // Gen the default images.
     PS2_TexImageInit();
 
-    // Make sure it's initially set to a valid palette (global_palette).
+    // Make sure it's initially set to a valid palette (ps2_global_palette).
     PS2_CinematicSetPalette(NULL);
 
     // And reserve a texture slot for the cinematic frame.
-    cinematic_frame.teximage = PS2_TexImageAlloc();
+    ps2_cinematic_frame.teximage = PS2_TexImageAlloc();
 
     // 3D mesh loading/rendering setup:
     PS2_ModelInit();
@@ -1137,15 +1147,25 @@ PS2_BeginRegistration
 */
 void PS2_BeginRegistration(const char * map_name)
 {
+    // Viewcluster crap:
+    extern int ps2_view_cluster;
+    extern int ps2_old_view_cluster;
+
+    // Stats counter for debug printing:
     extern int ps2_teximage_cache_hits;
     extern int ps2_unused_teximages_freed;
     extern int ps2_teximages_failed;
+    extern int ps2_teximage_load_time;
 
     Com_DPrintf("*** PS2_BeginRegistration: '%s' ***\n", map_name);
+
+    ps2_view_cluster     = -1;
+    ps2_old_view_cluster = -1;
 
     ps2_teximage_cache_hits    = 0;
     ps2_unused_teximages_freed = 0;
     ps2_teximages_failed       = 0;
+    ps2_teximage_load_time     = 0;
 
     ps2ref.registration_started = true;
     ps2ref.registration_sequence++;
@@ -1332,7 +1352,7 @@ void PS2_RenderFrame(refdef_t * view_def)
     CHECK_FRAME_STARTED();
     if (view_def == NULL)
     {
-        Sys_Error("Null view_def in PS2_RenderFrame!");
+        Sys_Error("PS2_RenderFrame: Null view def!");
     }
 
     // You can skip 3D frame rendering for profiling/testing.
@@ -1552,7 +1572,7 @@ void PS2_DrawChar(int x, int y, int c)
     {
         return; // Totally off screen
     }
-    if (next_in_2d_batch == DRAW2D_BATCH_SIZE)
+    if (ps2_next_in_2d_batch == DRAW2D_BATCH_SIZE)
     {
         return; // No more space this frame!
     }
@@ -1561,10 +1581,10 @@ void PS2_DrawChar(int x, int y, int c)
     row = (c >> 4) * GLYPH_SIZE;
     col = (c & 15) * GLYPH_SIZE;
 
-    screen_quad_t * quad = DRAW2D_NEXT_BATCH_ELEMENT();
+    ps2_screen_quad_t * quad = DRAW2D_NEXT_BATCH_ELEMENT();
 
     quad->z_index   = DRAW2D_NEXT_Z_INDEX();
-    quad->tex_index = TEXIMAGE_INDEX(builtin_tex_conchars);
+    quad->tex_index = TEXIMAGE_INDEX(ps2_builtin_tex_conchars);
 
     quad->x0 = x;
     quad->y0 = y;
@@ -1637,7 +1657,7 @@ void PS2_DrawTileClear(int x, int y, int w, int h, const char * name)
 {
     CHECK_FRAME_STARTED();
 
-    if (next_in_2d_batch == DRAW2D_BATCH_SIZE)
+    if (ps2_next_in_2d_batch == DRAW2D_BATCH_SIZE)
     {
         return; // No more space this frame!
     }
@@ -1649,7 +1669,7 @@ void PS2_DrawTileClear(int x, int y, int w, int h, const char * name)
         return;
     }
 
-    screen_quad_t * quad = DRAW2D_NEXT_BATCH_ELEMENT();
+    ps2_screen_quad_t * quad = DRAW2D_NEXT_BATCH_ELEMENT();
 
     quad->z_index   = DRAW2D_NEXT_Z_INDEX();
     quad->tex_index = TEXIMAGE_INDEX(teximage);
@@ -1688,12 +1708,12 @@ void PS2_DrawFill(int x, int y, int w, int h, int c)
         Sys_Error("PS2_DrawFill: Bad color index %d!", c);
     }
 
-    screen_quad_t * quad;
+    ps2_screen_quad_t * quad;
 
     // Full screen wipe with black (happens on pause and menus), treat it as a screen fade.
     if (c == 0 && x == 0 && y == 0 && w == viddef.width && h == viddef.height)
     {
-        if (fade_scr_index >= 0)
+        if (ps2_fade_scr_index >= 0)
         {
             return; // Already issued one this frame!
         }
@@ -1713,11 +1733,11 @@ void PS2_DrawFill(int x, int y, int w, int h, int c)
         quad->b = 0;
         quad->a = 255;
 
-        fade_scr_index = (next_in_2d_batch - 1);
+        ps2_fade_scr_index = (ps2_next_in_2d_batch - 1);
     }
     else // Smaller screen element:
     {
-        if (next_in_2d_batch == DRAW2D_BATCH_SIZE)
+        if (ps2_next_in_2d_batch == DRAW2D_BATCH_SIZE)
         {
             return; // No more space this frame!
         }
@@ -1732,7 +1752,7 @@ void PS2_DrawFill(int x, int y, int w, int h, int c)
         quad->x1 = x + w;
         quad->y1 = y + h;
 
-        u32 color = global_palette[c];
+        u32 color = ps2_global_palette[c];
         quad->r = (color & 0xFF);
         quad->g = (color >>  8) & 0xFF;
         quad->b = (color >> 16) & 0xFF;
@@ -1751,12 +1771,12 @@ void PS2_DrawFadeScreen(void)
 {
     CHECK_FRAME_STARTED();
 
-    if (fade_scr_index >= 0)
+    if (ps2_fade_scr_index >= 0)
     {
         return; // Already issued one this frame!
     }
 
-    screen_quad_t * quad = DRAW2D_NEXT_BATCH_ELEMENT();
+    ps2_screen_quad_t * quad = DRAW2D_NEXT_BATCH_ELEMENT();
 
     quad->z_index   = DRAW2D_NEXT_Z_INDEX();
     quad->tex_index = DRAW2D_TEX_INDEX_FADE_SCR;
@@ -1771,7 +1791,7 @@ void PS2_DrawFadeScreen(void)
     quad->b = 0;
     quad->a = (byte)ps2ref.fade_scr_alpha;
 
-    fade_scr_index = (next_in_2d_batch - 1);
+    ps2_fade_scr_index = (ps2_next_in_2d_batch - 1);
     ps2_draws2d++;
 }
 
@@ -1814,7 +1834,7 @@ void PS2_DrawStretchRaw(int x, int y, int w, int h, int cols, int rows, const by
 
     // Good idea to clear the buffer first, in case the
     // next upsampling doesn't fill the whole thing.
-    memset(cinematic_buffer, 0, sizeof(cinematic_buffer));
+    memset(ps2_cinematic_buffer, 0, sizeof(ps2_cinematic_buffer));
 
     // Upsample to fill our 256*256 cinematic buffer.
     // This is based on the algorithm applied by ref_gl.
@@ -1827,13 +1847,13 @@ void PS2_DrawStretchRaw(int x, int y, int w, int h, int cols, int rows, const by
         }
 
         source   = data + cols * row;
-        dest     = &cinematic_buffer[i * MAX_TEXIMAGE_SIZE];
+        dest     = &ps2_cinematic_buffer[i * MAX_TEXIMAGE_SIZE];
         fracstep = cols * 0x10000 / MAX_TEXIMAGE_SIZE;
         frac     = fracstep >> 1;
 
         for (j = 0; j < MAX_TEXIMAGE_SIZE; j++)
         {
-            color = cinematic_palette[source[frac >> 16]];
+            color = ps2_cinematic_palette[source[frac >> 16]];
 
             r = (color & 0xFF);
             g = (color >>  8) & 0xFF;
@@ -1846,16 +1866,16 @@ void PS2_DrawStretchRaw(int x, int y, int w, int h, int cols, int rows, const by
     }
 
     // Reset the texture parameters (notice we use linear filtering for smoother sampling):
-    PS2_TexImageSetup(cinematic_frame.teximage, "cinematic_frame", MAX_TEXIMAGE_SIZE,
+    PS2_TexImageSetup(ps2_cinematic_frame.teximage, "cinematic_frame", MAX_TEXIMAGE_SIZE,
                       MAX_TEXIMAGE_SIZE, TEXTURE_COMPONENTS_RGB, TEXTURE_FUNCTION_MODULATE,
-                      GS_PSM_16, LOD_MAG_LINEAR, LOD_MIN_LINEAR, IT_BUILTIN, (byte *)cinematic_buffer);
+                      GS_PSM_16, LOD_MAG_LINEAR, LOD_MIN_LINEAR, IT_BUILTIN, (byte *)ps2_cinematic_buffer);
 
     // Save these for drawing later.
-    cinematic_frame.x = x;
-    cinematic_frame.y = y;
-    cinematic_frame.w = w;
-    cinematic_frame.h = h;
-    cinematic_frame.draw_pending = true;
+    ps2_cinematic_frame.x = x;
+    ps2_cinematic_frame.y = y;
+    ps2_cinematic_frame.w = w;
+    ps2_cinematic_frame.h = h;
+    ps2_cinematic_frame.draw_pending = true;
 }
 
 /*
@@ -1877,12 +1897,12 @@ void PS2_DrawStretchTexImage(int x, int y, int w, int h, ps2_teximage_t * texima
 {
     CHECK_FRAME_STARTED();
 
-    if (next_in_2d_batch == DRAW2D_BATCH_SIZE)
+    if (ps2_next_in_2d_batch == DRAW2D_BATCH_SIZE)
     {
         return; // No more space this frame!
     }
 
-    screen_quad_t * quad = DRAW2D_NEXT_BATCH_ELEMENT();
+    ps2_screen_quad_t * quad = DRAW2D_NEXT_BATCH_ELEMENT();
 
     quad->z_index   = DRAW2D_NEXT_Z_INDEX();
     quad->tex_index = TEXIMAGE_INDEX(teximage);
@@ -1926,12 +1946,12 @@ void PS2_CinematicSetPalette(const byte * restrict palette)
 {
     if (palette == NULL)
     {
-        memcpy(cinematic_palette, global_palette, sizeof(cinematic_palette));
+        memcpy(ps2_cinematic_palette, ps2_global_palette, sizeof(ps2_cinematic_palette));
         return;
     }
 
     int i;
-    byte * restrict dest = (byte *)cinematic_palette;
+    byte * restrict dest = (byte *)ps2_cinematic_palette;
 
     for (i = 0; i < 256; i++)
     {

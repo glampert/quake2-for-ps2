@@ -101,6 +101,16 @@ static inline float ps2_rad_to_deg(float radians)
 	return radians * (180.0f / PS2MATH_PI);
 }
 
+static inline float ps2_msec_to_sec(float ms)
+{
+    return ms * 0.001f;
+}
+
+static inline float ps2_sec_to_msec(float sec)
+{
+    return sec * 1000.0f;
+}
+
 /*
  * PS2 doesn't support double-precision, so all the
  * default math.h functions are not defined, instead

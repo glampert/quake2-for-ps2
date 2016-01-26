@@ -21,7 +21,7 @@
 //#define PS2_VERBOSE_MODEL_LOADER
 
 // Memory for the model structures is statically allocated.
-enum { MDL_POOL_SIZE = 512 };
+enum { PS2_MDL_POOL_SIZE = 512 };
 
 // Stats for debug printing:
 int ps2_model_pool_used     = 0;
@@ -30,15 +30,23 @@ int ps2_unused_models_freed = 0;
 int ps2_inline_models_used  = 0;
 int ps2_models_failed       = 0;
 
+// Timings for a level-load (registration sequence):
+int ps2_model_load_fs_time    = 0; // Total milliseconds spent on FS_LoadFile.
+int ps2_model_load_world_time = 0; // Total milliseconds spent on world/brush models.
+int ps2_model_load_ents_time  = 0; // Total milliseconds spent on MD2 and sprites.
+
+// If set, maps are always discarded on level load, even if still the same.
+static cvar_t * r_ps2_flushmap = NULL;
+
 // World instance. Usually a reference to ps2_model_pool[0].
 static ps2_model_t * ps2_world_model = NULL;
 
 // Pool of models used by world/entities/sprites:
-static ps2_model_t ps2_model_pool[MDL_POOL_SIZE];
+static ps2_model_t ps2_model_pool[PS2_MDL_POOL_SIZE];
 
 // The inline * models from the current map are kept separate.
 // These are only referenced by the world geometry.
-static ps2_model_t ps2_inline_models[MDL_POOL_SIZE];
+static ps2_model_t ps2_inline_models[PS2_MDL_POOL_SIZE];
 
 // Used to hash the model filenames.
 extern u32 Sys_HashString(const char * str);
@@ -57,6 +65,7 @@ void PS2_ModelInit(void)
         Sys_Error("Invalid PS2_ModelInit call!");
     }
 
+    r_ps2_flushmap = Cvar_Get("r_ps2_flushmap", "0", 0);
     // No additional initialization right now...
 }
 
@@ -69,7 +78,7 @@ void PS2_ModelShutdown(void)
 {
     u32 i;
     ps2_model_t * model_iter = ps2_model_pool;
-    for (i = 0; i < MDL_POOL_SIZE; ++i, ++model_iter)
+    for (i = 0; i < PS2_MDL_POOL_SIZE; ++i, ++model_iter)
     {
         if (model_iter->type != MDL_NULL)
         {
@@ -91,7 +100,7 @@ PS2_ModelAlloc
 */
 ps2_model_t * PS2_ModelAlloc(void)
 {
-    if (ps2_model_pool_used == MDL_POOL_SIZE)
+    if (ps2_model_pool_used == PS2_MDL_POOL_SIZE)
     {
         Sys_Error("Out of model objects!!!");
     }
@@ -101,7 +110,7 @@ ps2_model_t * PS2_ModelAlloc(void)
     //
     u32 i;
     ps2_model_t * model_iter = ps2_model_pool;
-    for (i = 0; i < MDL_POOL_SIZE; ++i, ++model_iter)
+    for (i = 0; i < PS2_MDL_POOL_SIZE; ++i, ++model_iter)
     {
         if (model_iter->type == MDL_NULL)
         {
@@ -140,7 +149,7 @@ void PS2_ModelFreeUnused(void)
 {
     u32 i;
     ps2_model_t * model_iter = ps2_model_pool;
-    for (i = 0; i < MDL_POOL_SIZE; ++i, ++model_iter)
+    for (i = 0; i < PS2_MDL_POOL_SIZE; ++i, ++model_iter)
     {
         if (model_iter->type == MDL_NULL)
         {
@@ -162,14 +171,14 @@ void PS2_ModelFreeUnused(void)
 
 /*
 ==============
-LoadAliasMD2Model
+PS2_LoadAliasMD2Model
 
 Remarks: Local function.
 Fails with a Sys_Error if the data is invalid.
 Adapted from ref_gl.
 ==============
 */
-static void LoadAliasMD2Model(ps2_model_t * mdl, const void * mdl_data)
+static void PS2_LoadAliasMD2Model(ps2_model_t * mdl, const void * mdl_data)
 {
     int i, j;
     const dmdl_t * p_mdl_data_in = (const dmdl_t *)mdl_data;
@@ -320,12 +329,12 @@ static void LoadAliasMD2Model(ps2_model_t * mdl, const void * mdl_data)
 
 /*
 ==============
-LoadSpriteModel
+PS2_LoadSpriteModel
 
 Remarks: Local function.
 ==============
 */
-static void LoadSpriteModel(ps2_model_t * mdl, const void * mdl_data)
+static void PS2_LoadSpriteModel(ps2_model_t * mdl, const void * mdl_data)
 {
     (void)mdl_data;
     //TODO
@@ -489,7 +498,7 @@ BMod_LoadTexInfo
 static void BMod_LoadTexInfo(ps2_model_t * mdl, const byte * mdl_data, const lump_t * l)
 {
     // Set as the texture if loading fails.
-    extern ps2_teximage_t * builtin_tex_debug;
+    extern ps2_teximage_t * ps2_builtin_tex_debug;
 
     const textureinfo_t * in = (const textureinfo_t *)(mdl_data + l->fileofs);
     if (l->filelen % sizeof(*in))
@@ -530,7 +539,7 @@ static void BMod_LoadTexInfo(ps2_model_t * mdl, const byte * mdl_data, const lum
         // You'll get a nice and visible checker pattern if the texture can't be loaded.
         if (out->teximage == NULL)
         {
-            out->teximage = builtin_tex_debug;
+            out->teximage = ps2_builtin_tex_debug;
         }
     }
 
@@ -923,14 +932,14 @@ static void BMod_LoadSubmodels(ps2_model_t * mdl, const byte * mdl_data, const l
 
 /*
 ==============
-LoadBrushModel
+PS2_LoadBrushModel
 
 Remarks: Local function.
 Fails with a Sys_Error if the data is invalid.
 Adapted from ref_gl.
 ==============
 */
-static void LoadBrushModel(ps2_model_t * mdl, void * mdl_data)
+static void PS2_LoadBrushModel(ps2_model_t * mdl, void * mdl_data)
 {
     if (mdl != &ps2_model_pool[0])
     {
@@ -943,7 +952,7 @@ static void LoadBrushModel(ps2_model_t * mdl, void * mdl_data)
 
     if (version != BSPVERSION)
     {
-        Sys_Error("LoadBrushModel: '%s' has wrong version number (%i should be %i)",
+        Sys_Error("PS2_LoadBrushModel: '%s' has wrong version number (%i should be %i)",
                   mdl->name, version, BSPVERSION);
     }
 
@@ -1015,12 +1024,12 @@ static void LoadBrushModel(ps2_model_t * mdl, void * mdl_data)
 
 /*
 ==============
-FindInlineModel
+PS2_FindInlineModel
 
 Remarks: Local function.
 ==============
 */
-static inline ps2_model_t * FindInlineModel(const char * name)
+static inline ps2_model_t * PS2_FindInlineModel(const char * name)
 {
     int i = atoi(name + 1);
     if (i < 1 || ps2_world_model == NULL || i >= ps2_world_model->num_submodels)
@@ -1040,12 +1049,12 @@ static inline ps2_model_t * FindInlineModel(const char * name)
 
 /*
 ==============
-ReferenceAllTextures
+PS2_ReferenceAllTextures
 
 Remarks: Local function.
 ==============
 */
-static void ReferenceAllTextures(ps2_model_t * mdl)
+static void PS2_ReferenceAllTextures(ps2_model_t * mdl)
 {
     int i;
     dsprite_t * p_sprite;
@@ -1056,7 +1065,10 @@ static void ReferenceAllTextures(ps2_model_t * mdl)
     case MDL_BRUSH :
         for (i = 0; i < mdl->num_texinfos; ++i)
         {
-            if (mdl->texinfos[i].teximage == NULL) { continue; }
+            if (mdl->texinfos[i].teximage == NULL)
+            {
+                continue;
+            }
             mdl->texinfos[i].teximage->registration_sequence = ps2ref.registration_sequence;
         }
         break;
@@ -1079,7 +1091,7 @@ static void ReferenceAllTextures(ps2_model_t * mdl)
         break;
 
     default :
-        Sys_Error("ReferenceAllTextures: Bad model type for '%s'!", mdl->name);
+        Sys_Error("PS2_ReferenceAllTextures: Bad model type for '%s'!", mdl->name);
     } // switch (mdl->type)
 }
 
@@ -1102,7 +1114,7 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags)
     //
     if (name[0] == '*')
     {
-        return FindInlineModel(name);
+        return PS2_FindInlineModel(name);
     }
 
     //
@@ -1111,7 +1123,7 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags)
     u32 i;
     const u32 name_hash = Sys_HashString(name); // Compare by hash code, much cheaper.
     ps2_model_t * model_iter = ps2_model_pool;
-    for (i = 0; i < MDL_POOL_SIZE; ++i, ++model_iter)
+    for (i = 0; i < PS2_MDL_POOL_SIZE; ++i, ++model_iter)
     {
         if (model_iter->type == MDL_NULL)
         {
@@ -1129,7 +1141,7 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags)
             #endif // PS2_VERBOSE_MODEL_LOADER
 
             model_iter->registration_sequence = ps2ref.registration_sequence;
-            ReferenceAllTextures(model_iter);
+            PS2_ReferenceAllTextures(model_iter);
 
             return model_iter;
         }
@@ -1142,48 +1154,64 @@ ps2_model_t * PS2_ModelFindOrLoad(const char * name, int flags)
     strncpy(new_model->name, name, MAX_QPATH); // Save the name string for console printing
     new_model->hash = name_hash;               // We've already computed the name hash above!
 
-    // Load raw file data:
+    int start_time;
+    int end_time;
+    int file_len;
     void * file_data = NULL;
-    const int file_len = FS_LoadFile(name, &file_data);
-    if (file_data == NULL || file_len <= 0)
+
+    //
+    // Load raw file data:
+    //
+    start_time = Sys_Milliseconds();
     {
-        Com_DPrintf("WARNING: Unable to find model '%s'! Failed to open file.\n", name);
+        file_len = FS_LoadFile(name, &file_data);
+        if (file_data == NULL || file_len <= 0)
+        {
+            Com_DPrintf("WARNING: Unable to find model '%s'! Failed to open file.\n", name);
 
-        // Put it back into the pool.
-        PS2_ModelFree(new_model);
-        ++ps2_models_failed;
-        return NULL;
+            // Put it back into the pool.
+            PS2_ModelFree(new_model);
+            ++ps2_models_failed;
+            return NULL;
+        }
     }
+    end_time = Sys_Milliseconds();
+    ps2_model_load_fs_time += end_time - start_time;
 
+    //
     // Call the appropriate loader:
+    //
     const u32 id = LittleLong(*(u32 *)file_data);
     switch (id)
     {
     case IDALIASHEADER :
-// TODO
-// Should probably try to load the MD2 in-place to avoid allocating twice.
-// Or maybe we'll just preprocess it and save an optimized PS2 renderer representation?...
-//
-//        Hunk_New(&new_model->hunk, 0x200000, MEMTAG_MDL_ALIAS);
-        Hunk_New(&new_model->hunk, file_len + 512, MEMTAG_MDL_ALIAS);
-        LoadAliasMD2Model(new_model, file_data);
+        start_time = Sys_Milliseconds();
+        {
+            Hunk_New(&new_model->hunk, file_len + 128, MEMTAG_MDL_ALIAS); // Plus some extra bytes for rounding
+            PS2_LoadAliasMD2Model(new_model, file_data);
+        }
+        end_time = Sys_Milliseconds();
+        ps2_model_load_ents_time += end_time - start_time;
         break;
 
     case IDSPRITEHEADER :
-//TODO
-//        Hunk_New(&new_model->hunk, 0x10000, MEMTAG_MDL_SPRITE);
-        Hunk_New(&new_model->hunk, file_len + 512, MEMTAG_MDL_SPRITE);
-        LoadSpriteModel(new_model, file_data);
+        start_time = Sys_Milliseconds();
+        {
+            Hunk_New(&new_model->hunk, file_len + 128, MEMTAG_MDL_SPRITE); // Plus some extra bytes for rounding
+            PS2_LoadSpriteModel(new_model, file_data);
+        }
+        end_time = Sys_Milliseconds();
+        ps2_model_load_ents_time += end_time - start_time;
         break;
 
     case IDBSPHEADER :
-//TODO Should use a resident large block instead??? Sized for the biggest map???
-// Might also want to keep a resident block for the file contents, to avoid alloc/dealloc cycles...
-//
-//        Hunk_New(&new_model->hunk, 0x1000000, MEMTAG_MDL_WORLD);//16MB
-        Hunk_New(&new_model->hunk, 0x400000, MEMTAG_MDL_WORLD); //4MB works (apparently)
-        //Hunk_New(&new_model->hunk, file_len + 65535, MEMTAG_MDL_WORLD);
-        LoadBrushModel(new_model, file_data);
+        start_time = Sys_Milliseconds();
+        {
+            Hunk_New(&new_model->hunk, 0x400000, MEMTAG_MDL_WORLD);
+            PS2_LoadBrushModel(new_model, file_data);
+        }
+        end_time = Sys_Milliseconds();
+        ps2_model_load_world_time += end_time - start_time;
         break;
 
     default :
@@ -1207,25 +1235,27 @@ Remarks: Fails with a Sys_Error if the world model cannot be loaded.
 */
 void PS2_ModelLoadWorld(const char * name)
 {
-    // This function is only called by BeginRegistration,
-    // so it's a good place to reset these counters.
-    ps2_unused_models_freed = 0;
-    ps2_model_cache_hits    = 0;
-    ps2_inline_models_used  = 0;
-    ps2_models_failed       = 0;
-
     if (name == NULL || *name == '\0')
     {
         Sys_Error("LoadWorld: Null/empty map name!\n");
     }
+
+    // This function is only called by BeginRegistration,
+    // so it's a good place to reset these counters.
+    ps2_unused_models_freed   = 0;
+    ps2_model_cache_hits      = 0;
+    ps2_inline_models_used    = 0;
+    ps2_models_failed         = 0;
+    ps2_model_load_fs_time    = 0;
+    ps2_model_load_world_time = 0;
+    ps2_model_load_ents_time  = 0;
 
     char fullname[MAX_QPATH];
     Com_sprintf(fullname, sizeof(fullname), "maps/%s.bsp", name);
 
     // Explicitly free the old map if different.
     // This guarantees that that the first model is the world map.
-    cvar_t * flushmap = Cvar_Get("flushmap", "0", 0);
-    if (strcmp(ps2_model_pool[0].name, fullname) != 0 || flushmap->value)
+    if (strcmp(ps2_model_pool[0].name, fullname) != 0 || r_ps2_flushmap->value)
     {
         PS2_ModelFree(&ps2_model_pool[0]);
     }

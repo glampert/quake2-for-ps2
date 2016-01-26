@@ -39,13 +39,13 @@ ps2_mem_counters_t ps2_mem_tag_counts[MEMTAG_COUNT] = {0};
 
 /*
 ================
-OutOfMemoryError
+PS2_OutOfMemoryError
 
 Prints the out-of-memory report and calls Sys_Error().
 Never returns to the caller.
 ================
 */
-static void OutOfMemoryError(int alloc_attempt_size, ps2_mem_tag_t tag)
+static void PS2_OutOfMemoryError(int alloc_attempt_size, ps2_mem_tag_t tag)
 {
     char tags_dump_str[2048] = {0};
     char * ptr = tags_dump_str;
@@ -91,7 +91,7 @@ void * PS2_MemAlloc(int size_bytes, ps2_mem_tag_t tag)
     void * ptr = malloc(size_bytes);
     if (ptr == NULL)
     {
-        OutOfMemoryError(size_bytes, tag);
+        PS2_OutOfMemoryError(size_bytes, tag);
     }
 
     ps2_mem_tag_counts[tag].total_bytes += size_bytes;
@@ -130,7 +130,7 @@ void * PS2_MemAllocAligned(int alignment, int size_bytes, ps2_mem_tag_t tag)
     void * ptr = memalign(alignment, size_bytes);
     if (ptr == NULL)
     {
-        OutOfMemoryError(size_bytes, tag);
+        PS2_OutOfMemoryError(size_bytes, tag);
     }
 
     ps2_mem_tag_counts[tag].total_bytes += size_bytes;
@@ -328,7 +328,7 @@ Hunk_BlockAlloc
 */
 byte * Hunk_BlockAlloc(mem_hunk_t * hunk, int block_size)
 {
-    // LAMPERT: This is the way Quake2 does it, so I ain't changing it...
+    // LAMPERT: This is the way Win32 Quake does it, so I ain't changing it...
     block_size = (block_size + 31) & ~31; // round to cacheline
 
     // The hunk stack doesn't resize.

@@ -28,7 +28,7 @@ extern void Test_PS2_VU1Cubes(void);    // ps2_prog = 5
 
 // Default value for ps2_prog CVar:
 #ifndef DEFAULT_PS2_PROG
-    #define DEFAULT_PS2_PROG "5"
+    #define DEFAULT_PS2_PROG "0"
 #endif // DEFAULT_PS2_PROG
 
 /*

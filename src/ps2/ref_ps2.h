@@ -120,7 +120,7 @@ extern ps2_refresh_t ps2ref;
 
 // Palette used to expand the 8bits textures to RGBA32.
 // Imported from the colormap.pcx file.
-extern const u32 global_palette[256];
+extern const u32 ps2_global_palette[256];
 
 /*
 ==============================================================
@@ -157,7 +157,7 @@ qboolean PS2_IsFrameStarted(void);
 void PS2_BeginFrame(float camera_separation);
 void PS2_EndFrame(void);
 void PS2_RenderFrame(refdef_t * view_def);
-void PS2_DrawFrameSetup(refdef_t * view_def);
+void PS2_DrawFrameSetup(const refdef_t * view_def);
 void PS2_DrawWorldModel(refdef_t * view_def);
 void PS2_DrawViewEntities(refdef_t * view_def);
 
