@@ -63,7 +63,7 @@ typedef struct
 
 //
 // LAMPERT 2015-10-27
-// Made a bunch local data in this file 'static',
+// Made a bunch of local data in this file 'static',
 // since most global variables in here are never exported.
 //
 
@@ -913,9 +913,7 @@ int CM_BoxLeafnums_headnode(vec3_t mins, vec3_t maxs, int * list, int listsize, 
 
 int CM_BoxLeafnums(vec3_t mins, vec3_t maxs, int * list, int listsize, int * topnode)
 {
-    return CM_BoxLeafnums_headnode(mins, maxs, list,
-                                   listsize, map_cmodels[0].headnode,
-                                   topnode);
+    return CM_BoxLeafnums_headnode(mins, maxs, list, listsize, map_cmodels[0].headnode, topnode);
 }
 
 /*
@@ -996,8 +994,7 @@ static qboolean trace_ispoint; // optimized case
 CM_ClipBoxToBrush
 ================
 */
-void CM_ClipBoxToBrush(vec3_t mins, vec3_t maxs, vec3_t p1, vec3_t p2,
-                       trace_t * trace, cbrush_t * brush)
+void CM_ClipBoxToBrush(vec3_t mins, vec3_t maxs, vec3_t p1, vec3_t p2, trace_t * trace, cbrush_t * brush)
 {
     int i, j;
     cplane_t *plane, *clipplane;
@@ -1110,8 +1107,7 @@ void CM_ClipBoxToBrush(vec3_t mins, vec3_t maxs, vec3_t p1, vec3_t p2,
 CM_TestBoxInBrush
 ================
 */
-void CM_TestBoxInBrush(vec3_t mins, vec3_t maxs, vec3_t p1,
-                       trace_t * trace, cbrush_t * brush)
+void CM_TestBoxInBrush(vec3_t mins, vec3_t maxs, vec3_t p1, trace_t * trace, cbrush_t * brush)
 {
     int i, j;
     cplane_t * plane;
@@ -1271,11 +1267,15 @@ void CM_RecursiveHullCheck(int num, float p1f, float p2f, vec3_t p1, vec3_t p2)
         t1 = DotProduct(plane->normal, p1) - plane->dist;
         t2 = DotProduct(plane->normal, p2) - plane->dist;
         if (trace_ispoint)
+        {
             offset = 0;
+        }
         else
+        {
             offset = fabs(trace_extents[0] * plane->normal[0]) +
                      fabs(trace_extents[1] * plane->normal[1]) +
                      fabs(trace_extents[2] * plane->normal[2]);
+        }
     }
 
 #if 0

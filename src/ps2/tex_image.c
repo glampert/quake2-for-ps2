@@ -78,6 +78,14 @@ int ps2_teximages_failed       = 0;
 int ps2_scrap_allocs           = 0;
 int ps2_teximage_load_time     = 0;
 
+// These allow skipping the load of a given texture type.
+// When set, the returned texture will be the built-in debug texture.
+static cvar_t * r_ps2_skip_skin_tex_load   = NULL;
+static cvar_t * r_ps2_skip_sprite_tex_load = NULL;
+static cvar_t * r_ps2_skip_wall_tex_load   = NULL;
+static cvar_t * r_ps2_skip_sky_tex_load    = NULL;
+static cvar_t * r_ps2_skip_pic_tex_load    = NULL;
+
 //=============================================================================
 //
 // Texture image allocations and management:
@@ -139,6 +147,12 @@ void PS2_TexImageInit(void)
         Sys_Error("Invalid PS2_TexImageInit call!");
     }
 
+    r_ps2_skip_skin_tex_load   = Cvar_Get("r_ps2_skip_skin_tex_load",   "1", 0);
+    r_ps2_skip_sprite_tex_load = Cvar_Get("r_ps2_skip_sprite_tex_load", "1", 0);
+    r_ps2_skip_wall_tex_load   = Cvar_Get("r_ps2_skip_wall_tex_load",   "1", 0);
+    r_ps2_skip_sky_tex_load    = Cvar_Get("r_ps2_skip_sky_tex_load",    "1", 0);
+    r_ps2_skip_pic_tex_load    = Cvar_Get("r_ps2_skip_pic_tex_load",    "0", 0);
+
     //
     // Create the built-in textures:
     //
@@ -182,7 +196,7 @@ PS2_TexImageShutdown
 void PS2_TexImageShutdown(void)
 {
     // Free all non-null, non-built-in images:
-    u32 i;
+    int i;
     ps2_teximage_t * teximage_iter = ps2ref.teximages;
     for (i = 0; i < MAX_TEXIMAGES; ++i, ++teximage_iter)
     {
@@ -210,7 +224,7 @@ ps2_teximage_t * PS2_TexImageAlloc(void)
     //
     // Find a free slot in the image pool:
     //
-    u32 i;
+    int i;
     ps2_teximage_t * teximage_iter = ps2ref.teximages;
     for (i = 0; i < MAX_TEXIMAGES; ++i, ++teximage_iter)
     {
@@ -267,7 +281,7 @@ PS2_TexImageFreeUnused
 */
 void PS2_TexImageFreeUnused(void)
 {
-    u32 i;
+    int i;
     ps2_teximage_t * teximage_iter = ps2ref.teximages;
     for (i = 0; i < MAX_TEXIMAGES; ++i, ++teximage_iter)
     {
@@ -581,7 +595,7 @@ static ps2_teximage_t * FindImageImpl(const char * name, int flags)
     //
     // First, lookup our cache:
     //
-    u32 i;
+    int i;
     ps2_teximage_t * teximage_iter = ps2ref.teximages;
     for (i = 0; i < MAX_TEXIMAGES; ++i, ++teximage_iter)
     {
@@ -638,28 +652,54 @@ PS2_TexImageFindOrLoad
 */
 ps2_teximage_t * PS2_TexImageFindOrLoad(const char * name, int flags)
 {
-    ps2_teximage_t * teximage;
+    ps2_teximage_t * teximage = NULL;
     char fullname[MAX_QPATH];
 
     if (flags & (IT_PIC | IT_BUILTIN))
     {
-        // This is the same logic used by ref_gl.
-        // If the name doesn't start with a path separator, its just the base
-        // filename, like "conchars", otherwise the full file path is specified in 'name'.
-        if (name[0] != '/' && name[0] != '\\')
+        if (r_ps2_skip_pic_tex_load->value)
         {
-            Com_sprintf(fullname, sizeof(fullname), "pics/%s.pcx", name);
-            teximage = FindImageImpl(fullname, flags);
+            teximage = ps2_builtin_tex_debug;
         }
         else
         {
-            teximage = FindImageImpl(name + 1, flags);
+            // This is the same logic used by ref_gl.
+            // If the name doesn't start with a path separator, its just the base
+            // filename, like "conchars", otherwise the full file path is specified in 'name'.
+            if (name[0] != '/' && name[0] != '\\')
+            {
+                Com_sprintf(fullname, sizeof(fullname), "pics/%s.pcx", name);
+                teximage = FindImageImpl(fullname, flags);
+            }
+            else
+            {
+                teximage = FindImageImpl(name + 1, flags);
+            }
         }
     }
-    else
+    else // Skins, walls, etc:
     {
-        // Skins, walls, etc.
-        teximage = FindImageImpl(name, flags);
+        // Might want to skip a certain class of images...
+        if ((flags & IT_SKIN) && r_ps2_skip_skin_tex_load->value)
+        {
+            teximage = ps2_builtin_tex_debug;
+        }
+        else if ((flags & IT_SPRITE) && r_ps2_skip_sprite_tex_load->value)
+        {
+            teximage = ps2_builtin_tex_debug;
+        }
+        else if ((flags & IT_WALL) && r_ps2_skip_wall_tex_load->value)
+        {
+            teximage = ps2_builtin_tex_debug;
+        }
+        else if ((flags & IT_SKY) && r_ps2_skip_sky_tex_load->value)
+        {
+            teximage = ps2_builtin_tex_debug;
+        }
+        else // Load normally:
+        {
+            teximage = FindImageImpl(name, flags);
+        }
     }
 
     return teximage;
@@ -686,8 +726,7 @@ void PS2_TexImageSetup(ps2_teximage_t * teximage, const char * name, int w, int 
     // What this means is that we only have enough VRam
     // left for a single texture at a time, so every texture
     // must be copied to VRam on-the-fly, prior to any use.
-    teximage->texbuf.address = ps2ref.vram_texture_start;
-
+    teximage->texbuf.address         = ps2ref.vram_texture_start;
     teximage->pic                    = pic;
     teximage->width                  = w;
     teximage->height                 = h;
@@ -701,11 +740,10 @@ void PS2_TexImageSetup(ps2_teximage_t * teximage, const char * name, int w, int 
     teximage->texbuf.info.components = components;
     teximage->texbuf.info.function   = func;
     teximage->registration_sequence  = 0;
-
-    // These are only used by the scrap atlas.
-    teximage->u0 = teximage->u1 = 0;
-    teximage->v0 = teximage->v1 = 0;
-
+    teximage->texture_chain          = NULL;
+    // These are only used by the scrap atlas:
+    teximage->u0 = teximage->u1      = 0;
+    teximage->v0 = teximage->v1      = 0;
     // Finally, copy and hash the name string:
     strncpy(teximage->name, name, MAX_QPATH);
     teximage->hash = Sys_HashString(name);

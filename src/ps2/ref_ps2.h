@@ -28,6 +28,9 @@ PS2 renderer API types:
 ==============================================================
 */
 
+// Defined by model_load.h, but we only need a forward decl here.
+typedef const struct ps2_mdl_surface_s * ps2_mdl_surface_ptr;
+
 // Misc renderer constants.
 enum
 {
@@ -71,18 +74,19 @@ typedef enum
 // A texture or 2D image:
 typedef struct
 {
-    byte *          pic;                       // Pointer to heap memory, must be freed with PS2_TexImageFree.
-    ps2_imagetype_t type;                      // Types of textures used by Quake. See ps2_imagetype_t.
-    u16             width;                     // Width in pixels;  Must be > 0 && <= MAX_TEXIMAGE_SIZE.
-    u16             height;                    // Height in pixels; Must be > 0 && <= MAX_TEXIMAGE_SIZE.
-    u16             mag_filter;                // One of the LOD_MAG_* from libdraw.
-    u16             min_filter;                // One of the LOD_MIN_* from libdraw.
-    u16             u0, v0;                    // Offsets into the scrap if this is allocate from the scrap, zero otherwise.
-    u16             u1, v1;                    // If not zero, this is a scrap image. In such case, use these instead of w&h.
-    texbuffer_t     texbuf;                    // GS texture buffer info from libdraw.
-    u32             registration_sequence;     // Registration num, so we know if it is currently referenced by the level being played.
-    u32             hash;                      // Hash of the following string, for faster lookup.
-    char            name[MAX_QPATH];           // Name or id. If from a file, game path including extension.
+    byte *              pic;                   // Pointer to heap memory, must be freed with PS2_TexImageFree.
+    ps2_imagetype_t     type;                  // Types of textures used by Quake. See ps2_imagetype_t.
+    u16                 width;                 // Width in pixels;  Must be > 0 && <= MAX_TEXIMAGE_SIZE.
+    u16                 height;                // Height in pixels; Must be > 0 && <= MAX_TEXIMAGE_SIZE.
+    u16                 mag_filter;            // One of the LOD_MAG_* from libdraw.
+    u16                 min_filter;            // One of the LOD_MIN_* from libdraw.
+    u16                 u0, v0;                // Offsets into the scrap if this is allocate from the scrap, zero otherwise.
+    u16                 u1, v1;                // If not zero, this is a scrap image. In such case, use these instead of w&h.
+    texbuffer_t         texbuf;                // GS texture buffer info from libdraw.
+    ps2_mdl_surface_ptr texture_chain;         // For sort-by-texture world drawing.
+    u32                 registration_sequence; // Registration num, so we know if it is currently referenced by the level being played.
+    u32                 hash;                  // Hash of the following string, for faster lookup.
+    char                name[MAX_QPATH];       // Name or id. If from a file, game path including extension.
 } ps2_teximage_t;
 
 // Common renderer state structure (AKA the "refresh" module):

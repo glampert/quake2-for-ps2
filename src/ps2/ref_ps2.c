@@ -1147,7 +1147,7 @@ PS2_BeginRegistration
 */
 void PS2_BeginRegistration(const char * map_name)
 {
-    // Viewcluster crap:
+    // Viewcluster stuff:
     extern int ps2_view_cluster;
     extern int ps2_old_view_cluster;
 
@@ -1396,6 +1396,11 @@ PS2_TexImageVRamUpload
 void PS2_TexImageVRamUpload(ps2_teximage_t * teximage)
 {
     // Can be called outside Begin/End frame.
+
+    if (teximage == NULL)
+    {
+        teximage = ps2_builtin_tex_debug;
+    }
 
     if (ps2ref.current_tex == teximage) // Already in VRam.
     {

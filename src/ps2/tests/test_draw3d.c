@@ -42,8 +42,8 @@ static const int NUM_VERTEX_ELEMENTS = 2;
 // to send per draw list info to the Vector Unit 1.
 typedef struct
 {
-    // We send one matrix and 2 quadwords for each draw list.
-    byte buffer[sizeof(m_mat4_t) + sizeof(m_vec4_t) * 2] __attribute__((aligned(16)));
+    // We send one matrix and 1 quadword (vec4) for each draw list.
+    byte buffer[sizeof(m_mat4_t) + sizeof(m_vec4_t)] __attribute__((aligned(16)));
     byte * ptr;
 } draw_data_t;
 
@@ -68,26 +68,19 @@ static void DrawDataAddMatrix(draw_data_t * dd, const m_mat4_t * m)
     dd->ptr += sizeof(*m);
 }
 
-static void DrawDataAddScaleFactors(draw_data_t * dd)
+static void DrawDataAddScaleFactorsAndVertCount(draw_data_t * dd, u32 vert_count)
 {
     // GS rasterizer scale factors follow the MVP matrix:
     float * scale_vec = (float *)dd->ptr;
     scale_vec[0] = 2048.0f;
     scale_vec[1] = 2048.0f;
     scale_vec[2] = ((float)0xFFFFFF) / 32.0f;
-    scale_vec[3] = 1.0f; // unused
-    dd->ptr += sizeof(float) * 4;
-}
+    dd->ptr += sizeof(float) * 3;
 
-static void DrawDataAddVertexCount(draw_data_t * dd, u32 vert_count, u32 dest_address)
-{
-    // Vertex count and output address (expanded into a quadword):
-    u32 * counts = (u32 *)dd->ptr;
-    counts[0] = dest_address; // x
-    counts[1] = vert_count;   // y
-    counts[2] = 0;            // unused
-    counts[3] = 0;            // unused
-    dd->ptr += sizeof(u32) * 4;
+    // And lastly the vertex count in the W component of the quadword.
+    u32 * count = (u32 *)dd->ptr;
+    *count = vert_count;
+    dd->ptr += sizeof(u32);
 }
 
 static int CountVertexLoops(float vertex_qwords, float num_regs)
@@ -107,8 +100,7 @@ static void DrawVU1Triangle(draw_data_t * dd, const m_mat4_t * mvp)
 {
     DrawDataReset(dd);
     DrawDataAddMatrix(dd, mvp);
-    DrawDataAddScaleFactors(dd);
-    DrawDataAddVertexCount(dd, 3, 20); // 1 triangle = 3 verts; Write output beginning at qword address 20
+    DrawDataAddScaleFactorsAndVertCount(dd, 3); // 1 triangle = 3 verts
 
     VU1_Begin();
 
@@ -196,7 +188,7 @@ void Test_PS2_VU1Triangle(void)
 
     // Set up the matrices; these never change in this test program:
     Mat4_MakeLookAt(&view_matrix, &camera_origin, &camera_lookat, &camera_up);
-    Mat4_MakePerspProjection(&proj_matrix, ps2_deg_to_rad(60.0f), 4.0f / 3.0f, viddef.width, viddef.height, 2.0f, 1000.0f, 4096.0f);
+    Mat4_MakePerspProjection(&proj_matrix, ps2_deg_to_rad(60.0f), 4.0f / 3.0f, viddef.width, viddef.height, 2.0f, 2000.0f, 4096.0f);
     Mat4_Multiply(&view_proj_matrix, &view_matrix, &proj_matrix);
 
     // Temp buffer for DMA upload of the renderer matrix, etc.
@@ -297,8 +289,7 @@ static void DrawVU1Cube(draw_data_t * dd, const m_mat4_t * mvp, const cube_t * c
 {
     DrawDataReset(dd);
     DrawDataAddMatrix(dd, mvp);
-    DrawDataAddScaleFactors(dd);
-    DrawDataAddVertexCount(dd, CUBE_INDEX_COUNT, 100); // We actually have (7 + 36*2 = 79) qwords of input data
+    DrawDataAddScaleFactorsAndVertCount(dd, CUBE_INDEX_COUNT); // 1 vertex per index
 
     VU1_Begin();
 
@@ -347,6 +338,7 @@ static void DrawVU1Cube(draw_data_t * dd, const m_mat4_t * mvp, const cube_t * c
         VU1_ListAddFloat(vert->z);
         VU1_ListAddFloat(vert->w);
     }
+    // We have (6 + 36*2 = 78) qwords of draw data for a cube
 
     VU1_ListAddEnd();
 
@@ -386,7 +378,7 @@ void Test_PS2_VU1Cubes(void)
 
     // Set up the matrices; these never change in this test program:
     Mat4_MakeLookAt(&view_matrix, &camera_origin, &camera_lookat, &camera_up);
-    Mat4_MakePerspProjection(&proj_matrix, ps2_deg_to_rad(60.0f), 4.0f / 3.0f, viddef.width, viddef.height, 2.0f, 1000.0f, 4096.0f);
+    Mat4_MakePerspProjection(&proj_matrix, ps2_deg_to_rad(60.0f), 4.0f / 3.0f, viddef.width, viddef.height, 2.0f, 2000.0f, 4096.0f);
     Mat4_Multiply(&view_proj_matrix, &view_matrix, &proj_matrix);
 
     // Rotate the model, so it looks a little less boring.

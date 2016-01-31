@@ -41,4 +41,9 @@ void VU1_ListAdd64(u64 v);
 void VU1_ListAdd32(u32 v);
 void VU1_ListAddFloat(float v);
 
+// Adds an empty 128-bytes GIF tag + reglist to the draw list.
+// Returns the pointer to the first of the two quadwords.
+// You can then fill it with the tag data anytime before VU1_End().
+u64 * VU1_ListAddGIFTag(void);
+
 #endif // PS2_VU1_H

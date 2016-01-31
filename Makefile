@@ -13,6 +13,7 @@
 # All C source files used by the game and engine:
 #
 SRC_FILES = \
+	ps2/fact3.c \
 	ps2/tests/test_draw2d.c \
 	ps2/tests/test_draw3d.c \
 	ps2/builtin/backtile.c  \
@@ -132,7 +133,7 @@ IRX_FILES = usbd.irx
 # VCL/VU microprograms:
 #
 VCL_PATH  = src/ps2/vu1progs
-VCL_FILES = color_triangles.vcl
+VCL_FILES = color_triangles_clip_tris.vcl
 
 # ---------------------------------------------------------
 #  Libs from the PS2DEV SDK:
@@ -311,8 +312,7 @@ run: $(BIN_TARGET)
 clean:
 	$(ECHO_CLEANING)
 	$(QUIET) rm -f  $(BIN_TARGET)
-	$(QUIET) rm -f  $(OUTPUT_DIR)/$(IOP_OUTPUT_DIR)/*.s
-	$(QUIET) rm -f  $(OUTPUT_DIR)/$(IOP_OUTPUT_DIR)/*.o
+	$(QUIET) rm -rf $(OUTPUT_DIR)/$(IOP_OUTPUT_DIR)
 	$(QUIET) rm -rf $(OUTPUT_DIR)/$(VU_OUTPUT_DIR)
 	$(QUIET) rm -f  $(INSTALL_PATH)/$(notdir $(BIN_TARGET))
 	$(QUIET) find $(OUTPUT_DIR) -name "*.o" -type f -delete

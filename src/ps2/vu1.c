@@ -51,10 +51,13 @@ typedef struct
     qboolean is_buiding_dma; // True when between VU1_ListAddBegin/VU1_ListAddEnd
 } vu1_context_t;
 
-static u32           vu1_buffer_index;
-static byte *        vu1_current_buffer;
-static byte *        vu1_dma_buffers[2] __attribute__((aligned(16)));
-static vu1_context_t vu1_local_context  __attribute__((aligned(16)));
+// Allowed to be accessed externally.
+u32 vu1_buffer_index = 0;
+
+// Locals:
+static byte * vu1_current_buffer;
+static byte * vu1_dma_buffers[2] __attribute__((aligned(16)));
+static vu1_context_t vu1_local_context __attribute__((aligned(16)));
 
 // Wait time for the VIF DMAs: -1 no time out. Wait till finished.
 static const int VU1_DMA_CHAN_TIMEOUT = -1;
@@ -270,7 +273,7 @@ void VU1_ListData(int dest_address, void * data, int quad_size)
 {
     if ((u32)data & 0xF)
     {
-        Sys_Error("VU1_ListData: Pointer is not 16-byte aligned!");
+        Sys_Error("VU1_ListData: Pointer is not 16-bytes aligned!");
     }
 
     *((u64 *)vu1_current_buffer)++ = VU1_DMA_REF_TAG((u32)data, quad_size);
@@ -293,6 +296,26 @@ void VU1_ListAdd128(u64 v1, u64 v2)
     *((u64 *)vu1_current_buffer)++ = v1;
     *((u64 *)vu1_current_buffer)++ = v2;
     vu1_local_context.dma_size += sizeof(u64) * 2;
+}
+
+/*
+================
+VU1_ListAddGIFTag
+================
+*/
+u64 * VU1_ListAddGIFTag(void)
+{
+    if (!vu1_local_context.is_buiding_dma)
+    {
+        Sys_Error("VU1_ListAddGIFTag: Missing a DMA list begin!");
+    }
+
+    // Empty tag that the caller can fill up.
+    u64 * tag_ptr = (u64 *)vu1_current_buffer;
+    *((u64 *)vu1_current_buffer)++ = 0;
+    *((u64 *)vu1_current_buffer)++ = 0;
+    vu1_local_context.dma_size += sizeof(u64) * 2;
+    return tag_ptr;
 }
 
 /*

@@ -263,18 +263,26 @@ __declspec(naked) long Q_ftol(float f)
 /*
 ===============
 LerpAngle
-
 ===============
 */
 float LerpAngle(float a2, float a1, float frac)
 {
     if (a1 - a2 > 180)
+    {
         a1 -= 360;
+    }
     if (a1 - a2 < -180)
+    {
         a1 += 360;
+    }
     return a2 + frac * (a1 - a2);
 }
 
+/*
+===============
+anglemod
+===============
+*/
 float anglemod(float a)
 {
 #if 0
@@ -287,15 +295,18 @@ float anglemod(float a)
     return a;
 }
 
-int i;
-vec3_t corners[2];
+/*
+===============
+BoxOnPlaneSide2
 
-// this is the slow, general version
+This is the slow, general version
+===============
+*/
 int BoxOnPlaneSide2(vec3_t emins, vec3_t emaxs, struct cplane_s * p)
 {
     int i;
-    float dist1, dist2;
     int sides;
+    float dist1, dist2;
     vec3_t corners[2];
 
     for (i = 0; i < 3; i++)
@@ -311,14 +322,19 @@ int BoxOnPlaneSide2(vec3_t emins, vec3_t emaxs, struct cplane_s * p)
             corners[0][i] = emaxs[i];
         }
     }
+
     dist1 = DotProduct(p->normal, corners[0]) - p->dist;
     dist2 = DotProduct(p->normal, corners[1]) - p->dist;
+
     sides = 0;
     if (dist1 >= 0)
+    {
         sides = 1;
+    }
     if (dist2 < 0)
+    {
         sides |= 2;
-
+    }
     return sides;
 }
 
@@ -340,9 +356,13 @@ int BoxOnPlaneSide(vec3_t emins, vec3_t emaxs, struct cplane_s * p)
     if (p->type < 3)
     {
         if (p->dist <= emins[p->type])
+        {
             return 1;
+        }
         if (p->dist >= emaxs[p->type])
+        {
             return 2;
+        }
         return 3;
     }
 
@@ -389,12 +409,15 @@ int BoxOnPlaneSide(vec3_t emins, vec3_t emaxs, struct cplane_s * p)
 
     sides = 0;
     if (dist1 >= p->dist)
+    {
         sides = 1;
+    }
     if (dist2 < p->dist)
+    {
         sides |= 2;
+    }
 
     assert(sides != 0);
-
     return sides;
 }
 
@@ -744,9 +767,11 @@ vec_t VectorLength(vec3_t v)
 
     length = 0;
     for (i = 0; i < 3; i++)
+    {
         length += v[i] * v[i];
-    length = sqrt(length); // FIXME
+    }
 
+    length = sqrt(length);
     return length;
 }
 

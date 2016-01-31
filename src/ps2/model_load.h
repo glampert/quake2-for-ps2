@@ -30,8 +30,9 @@ enum
     SURF_DRAWBACKGROUND = 64,
     SURF_UNDERWATER     = 128,
 
-    // Number of elements in the poly vertex.
-    POLY_VERTEX_SIZE    = 7,
+    // Size in pixels of the lightmap atlases.
+    LM_BLOCK_WIDTH      = 128,
+    LM_BLOCK_HEIGHT     = 128,
 
     // Max height in pixels of MD2 skins.
     // This was the original size limit of Quake2,
@@ -57,9 +58,36 @@ typedef struct ps2_mdl_vertex_s
 } ps2_mdl_vertex_t;
 
 /*
+ * Vertex format used by ps2_mdl_poly_t
+ * Has two sets of texture coordinates for lightmapping.
+ */
+typedef struct ps2_poly_vertex_s
+{
+    // model vertex position:
+    vec3_t position;
+
+    // main tex coords:
+    float texture_s;
+    float texture_t;
+
+    // lightmap tex coords:
+    float lightmap_s;
+    float lightmap_t;
+} ps2_poly_vertex_t;
+
+/*
+ * Model triangle vertex indexes.
+ * Limited to 16bits to save space.
+ */
+typedef struct ps2_mdl_triangle_s
+{
+    u16 vertexes[3];
+} ps2_mdl_triangle_t;
+
+/*
  * Sub-model mesh data:
  */
-typedef struct ps2_mdl_sub_s
+typedef struct ps2_mdl_submod_s
 {
     vec3_t mins;
     vec3_t maxs;
@@ -77,7 +105,6 @@ typedef struct ps2_mdl_sub_s
 typedef struct ps2_mdl_edge_s
 {
     u16 v[2]; // vertex numbers/indexes
-    u32 cached_edge_offset;
 } ps2_mdl_edge_t;
 
 /*
@@ -98,11 +125,9 @@ typedef struct ps2_mdl_texinfo_s
  */
 typedef struct ps2_mdl_poly_s
 {
-    struct ps2_mdl_poly_s * next;
-    struct ps2_mdl_poly_s * chain;
-    int flags;                        // for SURF_UNDERWATER (not needed anymore?)
-    int num_verts;
-    float verts[4][POLY_VERTEX_SIZE]; // variable sized (xyz s1t1 s2t2)
+    int num_verts;                  // size of vertexes[], since it's dynamically allocated
+    ps2_poly_vertex_t  * vertexes;  // array of polygon vertexes. Never null
+    ps2_mdl_triangle_t * triangles; // (num_verts - 2) triangles with indexes into vertexes[]
 } ps2_mdl_poly_t;
 
 /*
@@ -115,9 +140,10 @@ typedef struct ps2_mdl_surface_s
 
     cplane_t * plane;
     int flags;
+    int debug_color;
 
-    int first_edge; // look up in model->surfedges[], negative numbers
-    int num_edges;  // are backwards edges
+    int first_edge; // look up in model->surf_edges[], negative numbers are backwards edges
+    int num_edges;
 
     s16 texture_mins[2];
     s16 extents[2];
@@ -126,8 +152,8 @@ typedef struct ps2_mdl_surface_s
     int dlight_s, dlight_t; // lightmap tex coordinates for dynamic lightmaps
 
     ps2_mdl_poly_t * polys; // multiple if warped
-    struct ps2_mdl_surface_s * texture_chain;
-    struct ps2_mdl_surface_s * lightmap_chain;
+    const struct ps2_mdl_surface_s * texture_chain;
+    const struct ps2_mdl_surface_s * lightmap_chain;
 
     ps2_mdl_texinfo_t * texinfo;
 
@@ -138,7 +164,7 @@ typedef struct ps2_mdl_surface_s
     int lightmap_texture_num;
     byte styles[MAXLIGHTMAPS];
     float cached_light[MAXLIGHTMAPS]; // values currently used in lightmap
-    byte * samples;                   // [numstyles*surfsize]
+    byte * samples;                   // [numstyles * surfsize]
 } ps2_mdl_surface_t;
 
 /*
