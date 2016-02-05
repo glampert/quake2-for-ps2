@@ -461,7 +461,7 @@ void CL_LoadClientinfo(clientinfo_t * ci, char * s)
         if (!ci->skin)
         {
             // see if the skin exists for the male model
-            Com_sprintf(skin_filename, sizeof(skin_filename), "players/%s/grunt.pcx", model_name, skin_name);
+            Com_sprintf(skin_filename, sizeof(skin_filename), "players/%s/grunt.pcx", model_name);
             ci->skin = re.RegisterSkin(skin_filename);
         }
 

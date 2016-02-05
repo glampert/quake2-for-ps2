@@ -11,6 +11,7 @@
  * ================================================================================================ */
 
 #include "ps2/debug_print.h"
+#include "ps2/defs_ps2.h"
 
 // PS2DEV libraries:
 #include <stdio.h>
@@ -62,7 +63,7 @@ typedef struct
  * the variable names in the structs above also don't help...
  */
 
-static scr_setup_data_t scr_setup_buffer __attribute__((aligned(16))) = {
+static scr_setup_data_t scr_setup_buffer PS2_ALIGN(16) = {
     { 0x100000000000800E, 0xE, 0xA0000, 0x4C, 0x8C, 0x4E },
     { 27648, 30976 },
     { 0x18 },
@@ -72,7 +73,7 @@ static scr_setup_data_t scr_setup_buffer __attribute__((aligned(16))) = {
       1, 0x79006C00, 5, 0x87009400, 5, 0x70000, 0x47 }
 };
 
-static scr_char_data_t scr_char_buffer __attribute__((aligned(16))) = {
+static scr_char_data_t scr_char_buffer PS2_ALIGN(16) = {
     { 0x1000000000000004, 0xE, 0xA000000000000, 0x50 },
     { 0 },
     0, 0,
@@ -81,7 +82,7 @@ static scr_char_data_t scr_char_buffer __attribute__((aligned(16))) = {
     { 0x52, 0, 0x53, 0x800000000000010, 0  }
 };
 
-static u32 scr_charmap[DBG_SCR_CHAR_SIZE * DBG_SCR_CHAR_SIZE] __attribute__((aligned(16)));
+static u32 scr_charmap[DBG_SCR_CHAR_SIZE * DBG_SCR_CHAR_SIZE] PS2_ALIGN(16);
 
 //=============================================================================
 //
@@ -491,7 +492,7 @@ void Dbg_ScrClearLine(int y)
 //
 //=============================================================================
 
-const unsigned char scr_font_bitmap[] __attribute__((aligned(16))) =
+const unsigned char scr_font_bitmap[] PS2_ALIGN(16) =
 "\x00\x00\x00\x00\x00\x00\x00\x00\x3c\x42\xa5\x81\xa5\x99\x42\x3c"
 "\x3c\x7e\xdb\xff\xff\xdb\x66\x3c\x6c\xfe\xfe\xfe\x7c\x38\x10\x00"
 "\x10\x38\x7c\xfe\x7c\x38\x10\x00\x10\x38\x54\xfe\x54\x10\x38\x00"

@@ -12,6 +12,7 @@
 
 #include "ps2/vu1.h"
 #include "ps2/mem_alloc.h"
+#include "ps2/defs_ps2.h"
 #include "game/q_shared.h" // For qboolean and stuff...
 
 // PS2DEV SDK:
@@ -56,8 +57,8 @@ u32 vu1_buffer_index = 0;
 
 // Locals:
 static byte * vu1_current_buffer;
-static byte * vu1_dma_buffers[2] __attribute__((aligned(16)));
-static vu1_context_t vu1_local_context __attribute__((aligned(16)));
+static byte * vu1_dma_buffers[2] PS2_ALIGN(16);
+static vu1_context_t vu1_local_context PS2_ALIGN(16);
 
 // Wait time for the VIF DMAs: -1 no time out. Wait till finished.
 static const int VU1_DMA_CHAN_TIMEOUT = -1;

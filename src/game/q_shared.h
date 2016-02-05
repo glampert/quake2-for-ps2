@@ -64,43 +64,49 @@ typedef enum
 #define NULL ((void *)0)
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#define Q_PRINTF_FUNC(fmtIndex, varIndex) __attribute__((format(printf, fmtIndex, varIndex)))
+#else // !GNU && !Clang
+#define Q_PRINTF_FUNC(fmtIndex, varIndex) /* unimplemented */
+#endif // GNU/Clang
+
 // angle indexes
 #define PITCH 0 // up / down
-#define YAW 1   // left / right
-#define ROLL 2  // fall over
+#define YAW   1 // left / right
+#define ROLL  2 // fall over
 
-#define MAX_STRING_CHARS 1024 // max length of a string passed to Cmd_TokenizeString
-#define MAX_STRING_TOKENS 80  // max tokens resulting from Cmd_TokenizeString
-#define MAX_TOKEN_CHARS 128   // max length of an individual token
+#define MAX_STRING_CHARS  1024 // max length of a string passed to Cmd_TokenizeString
+#define MAX_STRING_TOKENS 80   // max tokens resulting from Cmd_TokenizeString
+#define MAX_TOKEN_CHARS   128  // max length of an individual token
 
-#define MAX_QPATH 64   // max length of a quake game pathname
+#define MAX_QPATH  64  // max length of a quake game pathname
 #define MAX_OSPATH 128 // max length of a filesystem pathname
 
 //
 // per-level limits
 //
-#define MAX_CLIENTS 256 // absolute limit
-#define MAX_EDICTS 1024 // must change protocol to increase more
+#define MAX_CLIENTS     256  // absolute limit
+#define MAX_EDICTS      1024 // must change protocol to increase more
 #define MAX_LIGHTSTYLES 256
-#define MAX_MODELS 256 // these are sent over the net as bytes
-#define MAX_SOUNDS 256 // so they cannot be blindly increased
-#define MAX_IMAGES 256
-#define MAX_ITEMS 256
+#define MAX_MODELS      256  // these are sent over the net as bytes
+#define MAX_SOUNDS      256  // so they cannot be blindly increased
+#define MAX_IMAGES      256
+#define MAX_ITEMS       256
 #define MAX_GENERAL (MAX_CLIENTS * 2) // general config strings
 
 // game print flags
-#define PRINT_LOW 0    // pickup messages
-#define PRINT_MEDIUM 1 // death messages
-#define PRINT_HIGH 2   // critical messages
-#define PRINT_CHAT 3   // chat messages
+#define PRINT_LOW       0 // pickup messages
+#define PRINT_MEDIUM    1 // death messages
+#define PRINT_HIGH      2 // critical messages
+#define PRINT_CHAT      3 // chat messages
 
-#define ERR_FATAL 0      // exit the entire game with a popup window
-#define ERR_DROP 1       // print to console and disconnect from game
-#define ERR_DISCONNECT 2 // don't kill server
+#define ERR_FATAL       0 // exit the entire game with a popup window
+#define ERR_DROP        1 // print to console and disconnect from game
+#define ERR_DISCONNECT  2 // don't kill server
 
-#define PRINT_ALL 0
+#define PRINT_ALL       0
 #define PRINT_DEVELOPER 1 // only print when "developer 1"
-#define PRINT_ALERT 2
+#define PRINT_ALERT     2
 
 // destination class for gi.multicast()
 typedef enum
@@ -199,10 +205,9 @@ void COM_StripExtension(char * in, char * out);
 void COM_FileBase(char * in, char * out);
 void COM_FilePath(char * in, char * out);
 void COM_DefaultExtension(char * path, char * extension);
-
 char * COM_Parse(char ** data_p); // data is an in/out parm, returns a parsed out token
-void Com_sprintf(char * dest, int size, const char * fmt, ...);
 
+void Com_sprintf(char * dest, int size, const char * fmt, ...) Q_PRINTF_FUNC(3, 4);
 void Com_PageInMemory(byte * buffer, int size);
 
 //=============================================
@@ -212,7 +217,7 @@ int Q_stricmp(const char * s1, const char * s2);
 int Q_strcasecmp(const char * s1, const char * s2);
 int Q_strncasecmp(const char * s1, const char * s2, int n);
 
-char * va(const char * format, ...) __attribute__((format(printf, 1, 2)));
+char * va(const char * format, ...) Q_PRINTF_FUNC(1, 2);
 
 //=============================================
 
@@ -302,8 +307,8 @@ char * Sys_FindNext(unsigned musthave, unsigned canthave);
 void Sys_FindClose(void);
 
 // this is only here so the functions in q_shared.c and q_shwin.c can link
-void Sys_Error(const char * error, ...) __attribute__((format(printf, 1, 2)));
-void Com_Printf(const char * msg, ...) __attribute__((format(printf, 1, 2)));
+void Sys_Error(const char * error, ...) Q_PRINTF_FUNC(1, 2);
+void Com_Printf(const char * msg, ...) Q_PRINTF_FUNC(1, 2);
 
 /*
 ==========================================================

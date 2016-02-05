@@ -13,10 +13,14 @@
 #include "client/client.h"
 #include "ps2/ref_ps2.h"
 #include "ps2/mem_alloc.h"
-#include "ps2/vu1.h"
-#include "ps2/gs_defs.h"
 #include "ps2/math_funcs.h"
 #include "ps2/vec_mat.h"
+
+#include "ps2/vu1.h"
+#include "ps2/gs_defs.h"
+
+#include "ps2/dma_mgr.h"
+#include "ps2/vu_prog_mgr.h"
 
 // Functions exported from this file:
 void Test_PS2_VU1Triangle(void);
@@ -28,9 +32,8 @@ void Test_PS2_VU1Cubes(void);
 //
 //=============================================================================
 
-// The VU1 program generated from color_triangles.vcl
-extern void VU1Prog_Color_Triangles_CodeStart VU_DATA_SECTION;
-extern void VU1Prog_Color_Triangles_CodeEnd   VU_DATA_SECTION;
+// The VU1 program generated a .VCL source file:
+DECLARE_VU_MICROPROGRAM(VU1Prog_Color_Triangles);
 
 // GS vertex format for our triangles (reglist):
 static const u64 VERTEX_FORMAT = (((u64)GS_REG_RGBAQ) << 0) | (((u64)GS_REG_XYZ2) << 4);
@@ -43,7 +46,7 @@ static const int NUM_VERTEX_ELEMENTS = 2;
 typedef struct
 {
     // We send one matrix and 1 quadword (vec4) for each draw list.
-    byte buffer[sizeof(m_mat4_t) + sizeof(m_vec4_t)] __attribute__((aligned(16)));
+    byte buffer[sizeof(m_mat4_t) + sizeof(m_vec4_t)] PS2_ALIGN(16);
     byte * ptr;
 } draw_data_t;
 
@@ -160,6 +163,137 @@ static void DrawVU1Triangle(draw_data_t * dd, const m_mat4_t * mvp)
     VU1_End(0);
 }
 
+#define XYZ2 ((u64)0x05)
+#define XYZ2_SET(X, Y, Z) ((PS2_AS_U128(Z) << 32) | (PS2_AS_U128(Y) << 16) | (PS2_AS_U128(X) << 0))
+
+#define TEST_1 ((u64)0x47)
+#define TEST_SET(ATE, ATST, AREF, AFAIL, DATE, DATM, ZTE, ZTST) (((u64)(ZTST) << 17) | ((u64)(ZTE) << 16) | ((u64)(DATM) << 15) | ((u64)(DATE) << 14) | ((u64)(AFAIL) << 12) | ((u64)(AREF) << 4) | ((u64)(ATST) << 1) | ((u64)(ATE) << 0))
+
+#define RGBAQ ((u64)0x01)
+#define RGBAQ_SET(R, G, B, A, Q) (((u64)(Q) << 32) | ((u64)(A) << 24) | ((u64)(B) << 16) | ((u64)(G) << 8) | ((u64)(R) << 0))
+
+#define PRMODE ((u64)0x1B)
+#define PRMODE_SET(IIP, TME, FGE, ABE, AA1, FST, CTXT, FIX) ((u64)((FIX << 10) | (CTXT << 9) | (FST << 8) | (AA1 << 7) | (ABE << 6) | (FGE << 5) | (TME << 4) | (IIP << 3)))
+
+#define PRIM ((u64)0x00)
+#define PRIM_SET(PRIM, IIP, TME, FGE, ABE, AA1, FST, CTXT, FIX) (PRMODE_SET(IIP, TME, FGE, ABE, AA1, FST, CTXT, FIX) | PRIM)
+
+static int InitScreenClear(ps2_vif_static_dma_t * vif_static_dma, int R, int G, int B)
+{
+    int x0 = (2048 - (viddef.width >> 1)) << 4;
+    int y0 = (2048 - (viddef.height >> 1)) << 4;
+    int x1 = (2048 + (viddef.width >> 1)) << 4;
+    int y1 = (2048 + (viddef.height >> 1)) << 4;
+
+    // Get the address of the screen clear packet so we can CALL it
+    // from the dynamic packet.
+    const u32 screen_clear_dma = VIFDMA_GetPointer(vif_static_dma);
+
+    // Start the VIF direct mode.
+    VIFDMA_StartDirect(vif_static_dma);
+
+    VIFDMA_AddU128(vif_static_dma, PS2_GS_GIFTAG_BATCH(4 + (20 * 2), 1, 0, 0,
+                                                       PS2_GIFTAG_PACKED, PS2_GS_BATCH_1(PS2_GIFTAG_AD)));
+
+    VIFDMA_AddU64(vif_static_dma, TEST_SET(0, 0, 0, 0, 0, 0, 1, 1));
+    VIFDMA_AddU64(vif_static_dma, TEST_1);
+
+    VIFDMA_AddU64(vif_static_dma, PRIM_SET(0x6, 0, 0, 0, 0, 0, 0, 0, 0));
+    VIFDMA_AddU64(vif_static_dma, PRIM);
+
+    VIFDMA_AddU64(vif_static_dma, RGBAQ_SET(R, G, B, 0x80, 0x3f800000));
+    VIFDMA_AddU64(vif_static_dma, RGBAQ);
+
+    int i;
+    for (i = 0; i < 20; i++)
+    {
+        VIFDMA_AddU64(vif_static_dma, XYZ2_SET(x0, y0, 0));
+        VIFDMA_AddU64(vif_static_dma, XYZ2);
+
+        VIFDMA_AddU64(vif_static_dma, XYZ2_SET(x0 + (32 << 4), y1, 0));
+        VIFDMA_AddU64(vif_static_dma, XYZ2);
+
+        x0 += (32 << 4);
+    }
+
+    VIFDMA_AddU64(vif_static_dma, TEST_SET(0, 0, 0, 0, 0, 0, 1, 3));
+    VIFDMA_AddU64(vif_static_dma, TEST_1);
+
+    VIFDMA_EndDirect(vif_static_dma);
+    VIFDMA_DMARet(vif_static_dma);
+
+    return screen_clear_dma;
+}
+
+static u32 SetUpTriangleDMA(ps2_vif_static_dma_t * vif_static_dma)
+{
+    // Get the address of static data that we can call to later.
+    u32 iStaticAddr = VIFDMA_GetPointer(vif_static_dma);
+
+    // Drawing 2 triangles.
+    int iTriangles = 2;
+    // There are three vertices per triangle
+    int iVerts = iTriangles * 3;
+
+    FU32_t i2f;
+    i2f.asI32 = iVerts;
+
+    // We want to unpack 2 quad words of misc data, and then 2QW per vertex starting at
+    // VU mem location 4 (we will upload the MVP matrix to the first 4QW).
+    // Unpack at location 4
+    // Each vertex is 2 qwords in size
+    VIFDMA_AddUnpack(vif_static_dma, VIF_V4_32, 4, 2 + (iVerts * 2));
+    VIFDMA_AddVector4F(vif_static_dma, 2048.0f, 2048.0f, ((float)0xFFFFFF) / 32.0f, i2f.asFloat);
+
+    // Add the GIFTag
+    VIFDMA_AddU128(vif_static_dma, PS2_GS_GIFTAG_BATCH(iVerts,               // NLOOP
+                                                       1,                    // EOP
+                                                       1,                    // PRE
+                                                       PS2_GS_PRIM(PS2_PRIM_TRIANGLE, // PRIM
+                                                                   PS2_PRIM_IIP_GOURAUD,
+                                                                   PS2_PRIM_TME_OFF,
+                                                                   PS2_PRIM_FGE_OFF,
+                                                                   PS2_PRIM_ABE_OFF,
+                                                                   PS2_PRIM_AA1_OFF,
+                                                                   PS2_PRIM_FST_UV,
+                                                                   PS2_PRIM_CTXT_CONTEXT1,
+                                                                   PS2_PRIM_FIX_NOFIXDDA),
+                                                       PS2_GIFTAG_PACKED,               // FLG
+                                                       PS2_GS_BATCH_2(PS2_GIFTAG_RGBAQ, // BATCH
+                                                                      PS2_GIFTAG_XYZ2)));
+
+    // Add the quad
+    VIFDMA_AddU128(vif_static_dma, PS2_PACKED_RGBA(0x80, 0x00, 0x00, 0x80));  // Colour
+    VIFDMA_AddVector4F(vif_static_dma, -3.0f, 3.0f, 3.0f, 1.0f);  // Vert
+
+    VIFDMA_AddU128(vif_static_dma, PS2_PACKED_RGBA(0x80, 0x00, 0x00, 0x80));  // Colour
+    VIFDMA_AddVector4F(vif_static_dma, 3.0f, 3.0f, 3.0f, 1.0f);   // Vert
+
+    VIFDMA_AddU128(vif_static_dma, PS2_PACKED_RGBA(0x80, 0x00, 0x00, 0x80));  // Colour
+    VIFDMA_AddVector4F(vif_static_dma, -3.0f, -3.0f, 3.0f, 1.0f); // Vert
+
+    VIFDMA_AddU128(vif_static_dma, PS2_PACKED_RGBA(0x00, 0x00, 0x80, 0x80));  // Colour
+    VIFDMA_AddVector4F(vif_static_dma, -3.0f, -3.0f, 3.0f, 1.0f); // Vert
+
+    VIFDMA_AddU128(vif_static_dma, PS2_PACKED_RGBA(0x00, 0x00, 0x80, 0x80));  // Colour
+    VIFDMA_AddVector4F(vif_static_dma, 3.0f, 3.0f, 3.0f, 1.0f);   // Vert
+
+    VIFDMA_AddU128(vif_static_dma, PS2_PACKED_RGBA(0x00, 0x00, 0x80, 0x80));  // Colour
+    VIFDMA_AddVector4F(vif_static_dma, 3.0f, -3.0f, 3.0f, 1.0f);  // Vert
+
+    // Flush to make sure VU1 isn't doing anything.
+    VIFDMA_AddU32(vif_static_dma, VIF_FLUSH);
+
+    // Then run the microcode.
+    VIFDMA_AddU32(vif_static_dma, VIF_MSCALL(0));
+
+    // Return back to the dynamic chain (note that we aren't aligned on a QWORD boundary, but
+    // it doesn't matter because the packet class will sort that out for us).
+    VIFDMA_DMARet(vif_static_dma);
+
+    return iStaticAddr;
+}
+
 void Test_PS2_VU1Triangle(void)
 {
     Com_Printf("====== QPS2 - Test_PS2_VU1Triangle ======\n");
@@ -179,12 +313,22 @@ void Test_PS2_VU1Triangle(void)
     m_mat4_t model_matrix;
 
     // Clear the screen to dark gray. Default color is black.
-    ps2ref.screen_color.r = 120;
-    ps2ref.screen_color.g = 120;
-    ps2ref.screen_color.b = 120;
+    PS2_SetClearColor(120, 120, 120);
 
     // Upload the VU1 microprogram:
-    VU1_UploadProg(0, &VU1Prog_Color_Triangles_CodeStart, &VU1Prog_Color_Triangles_CodeEnd);
+//    VU1_UploadProg(0, &VU1Prog_Color_Triangles_CodeStart, &VU1Prog_Color_Triangles_CodeEnd);
+
+    ps2_vu_prog_manager_t vu_prog_mgr;
+    ps2_vif_dynamic_dma_t vif_dynamic_dma;
+    ps2_vif_static_dma_t  vif_static_dma;
+
+    VIFDMA_Initialize(&vif_dynamic_dma, /* pages = */ 8, VIF_DYNAMIC_DMA);
+    VIFDMA_Initialize(&vif_static_dma,  /* pages = */ 8, VIF_STATIC_DMA);
+
+    VU_ProgManagerInit(&vu_prog_mgr);
+    VU_InitMicroprogram(&vif_static_dma, &VU1Prog_Color_Triangles, VU1_MICROPROGRAM, /* offset = */ 0);
+    VU_UploadMicroprogram(&vu_prog_mgr, &vif_dynamic_dma, &VU1Prog_Color_Triangles,  /* index  = */ 0, /* force = */ true);
+    VIFDMA_Fire(&vif_dynamic_dma);
 
     // Set up the matrices; these never change in this test program:
     Mat4_MakeLookAt(&view_matrix, &camera_origin, &camera_lookat, &camera_up);
@@ -194,6 +338,10 @@ void Test_PS2_VU1Triangle(void)
     // Temp buffer for DMA upload of the renderer matrix, etc.
     draw_data_t dd = {0};
 
+    // Copy the geometry into a static DMA buffer that we'll resubmit repeated times.
+    const u32 triangle_dma_addr = SetUpTriangleDMA(&vif_static_dma);
+    const u32 screen_clear_dma_addr = InitScreenClear(&vif_static_dma, 120, 120, 120);
+
     // Rotate the model, so it looks a little less boring.
     float rotation_angle = 0.0f; // In radians
 
@@ -201,15 +349,36 @@ void Test_PS2_VU1Triangle(void)
     {
         PS2_BeginFrame(0);
 
+        // TODO WORK IN PROGRESS
+        /*
         Mat4_MakeRotationZ(&rotation_matrix, rotation_angle);
         Mat4_MakeTranslation(&translation_matrix, 1.0f, 0.0f, 0.0f);
+        Mat4_Multiply(&model_matrix, &rotation_matrix, &translation_matrix);
+        Mat4_Multiply(&mvp_matrix, &model_matrix, &view_proj_matrix);
 
+        //VIFDMA_DMACall(&vif_dynamic_dma, screen_clear_dma_addr);
+
+        VIFDMA_AddUnpack(&vif_dynamic_dma, VIF_V4_32, 0, 4); // Unpack 4QW to VU memory addr 0
+        VIFDMA_AddMatrix4F(&vif_dynamic_dma, (float *)&mvp_matrix);
+
+        VIFDMA_DMACall(&vif_dynamic_dma, triangle_dma_addr);
+
+        VIFDMA_Fire(&vif_dynamic_dma);
+
+        //#define D1_CHCR *((volatile u32 *)(0x10009000))
+        //while (D1_CHCR & 256) { }
+        //*/
+
+        //*
+        Mat4_MakeRotationZ(&rotation_matrix, rotation_angle);
+        Mat4_MakeTranslation(&translation_matrix, 1.0f, 0.0f, 0.0f);
         Mat4_Multiply(&model_matrix, &rotation_matrix, &translation_matrix);
         Mat4_Multiply(&mvp_matrix, &model_matrix, &view_proj_matrix);
 
         DrawVU1Triangle(&dd, &mvp_matrix);
-        rotation_angle += 0.02f;
+        //*/
 
+        rotation_angle += 0.02f;
         PS2_EndFrame();
     }
 }
@@ -229,7 +398,7 @@ typedef struct
     u16      * indexes;
 } cube_t;
 
-static void MakeCube(cube_t * cube, const float scale)
+static void MakeCubeGeometry(cube_t * cube, const float scale)
 {
     // Face indexes:
     const u16 cubeF[6][4] = {
@@ -350,6 +519,82 @@ static void DrawVU1Cube(draw_data_t * dd, const m_mat4_t * mvp, const cube_t * c
     PS2_WaitGSDrawFinish();
 }
 
+static u32 SetUpCubeDMA(const cube_t * cube, ps2_vif_static_dma_t * vif_static_dma)
+{
+    const u32 static_addr = VIFDMA_GetPointer(vif_static_dma);
+    const int num_verts   = CUBE_INDEX_COUNT;
+
+    FU32_t i2f;
+    i2f.asI32 = num_verts;
+
+    //
+    // We want to unpack 2 quadwords of misc data, and then 2QWs per vertex starting
+    // as VU mem location 4 (we will upload the MVP matrix to the first 4QWs).
+    //
+    // Unpack at location 4
+    // Each vertex is 2 qwords in size
+    //
+    VIFDMA_AddUnpack(vif_static_dma, VIF_V4_32, 4, 2 + (num_verts * 2));
+    VIFDMA_AddVector4F(vif_static_dma, 2048.0f, 2048.0f, ((float)0xFFFFFF) / 32.0f, i2f.asFloat);
+
+    //
+    // Add the GIF Tag:
+    //
+    VIFDMA_AddU128(vif_static_dma, PS2_GS_GIFTAG_BATCH(num_verts,                     // NLOOP
+                                                       1,                             // EOP
+                                                       1,                             // PRE
+                                                       PS2_GS_PRIM(PS2_PRIM_TRIANGLE, // PRIM
+                                                                   PS2_PRIM_IIP_GOURAUD,
+                                                                   PS2_PRIM_TME_OFF,
+                                                                   PS2_PRIM_FGE_OFF,
+                                                                   PS2_PRIM_ABE_OFF,
+                                                                   PS2_PRIM_AA1_ON,
+                                                                   PS2_PRIM_FST_STQ,
+                                                                   PS2_PRIM_CTXT_CONTEXT1,
+                                                                   PS2_PRIM_FIX_NOFIXDDA),
+                                                       PS2_GIFTAG_PACKED,
+                                                       PS2_GS_BATCH_2(PS2_GIFTAG_RGBAQ, PS2_GIFTAG_XYZ2)));
+
+    //
+    // Add the cube data to the static buffer:
+    //
+    const byte colors[4][4] = {
+        { 0x80, 0x00, 0x00, 0x80 }, // red
+        { 0x00, 0x80, 0x00, 0x80 }, // green
+        { 0x00, 0x00, 0x80, 0x80 }, // blue
+        { 0x80, 0x80, 0x00, 0x80 }  // yellow
+    };
+
+    // Push one vertex per cube index:
+    int i, j, c;
+    for (i = 0, j = 0, c = 0; i < num_verts; ++i, ++j)
+    {
+        const m_vec4_t * vert = &cube->vertexes[cube->indexes[i]];
+
+        VIFDMA_AddVector4I(vif_static_dma, colors[c][0], colors[c][1], colors[c][2], colors[c][3]);
+        VIFDMA_AddVector4F(vif_static_dma, vert->x, vert->y, vert->z, vert->w);
+
+        // Each triangle will get a different color.
+        if (j == 3)
+        {
+            c = (c + 1) & 3;
+            j = 0;
+        }
+    }
+
+    // Flush to make sure VU1 isn't doing anything.
+    VIFDMA_AddU32(vif_static_dma, VIF_FLUSH);
+
+    // Then run the microcode at addr 0.
+    VIFDMA_AddU32(vif_static_dma, VIF_MSCALL(0));
+
+    // Return back to the dynamic chain.
+    VIFDMA_DMARet(vif_static_dma);
+
+    // Address that we can resubmit for many cubes.
+    return static_addr;
+}
+
 void Test_PS2_VU1Cubes(void)
 {
     Com_Printf("====== QPS2 - Test_PS2_VU1Cubes ======\n");
@@ -369,12 +614,22 @@ void Test_PS2_VU1Cubes(void)
     m_mat4_t model_matrix;
 
     // Clear the screen to dark gray. Default color is black.
-    ps2ref.screen_color.r = 120;
-    ps2ref.screen_color.g = 120;
-    ps2ref.screen_color.b = 120;
+    PS2_SetClearColor(120, 120, 120);
 
     // Upload the VU1 microprogram:
-    VU1_UploadProg(0, &VU1Prog_Color_Triangles_CodeStart, &VU1Prog_Color_Triangles_CodeEnd);
+//    VU1_UploadProg(0, &VU1Prog_Color_Triangles_CodeStart, &VU1Prog_Color_Triangles_CodeEnd);
+
+    ps2_vu_prog_manager_t vu_prog_mgr;
+    ps2_vif_dynamic_dma_t vif_dynamic_dma;
+    ps2_vif_static_dma_t  vif_static_dma;
+
+    VIFDMA_Initialize(&vif_dynamic_dma, /* pages = */ 8, VIF_DYNAMIC_DMA);
+    VIFDMA_Initialize(&vif_static_dma,  /* pages = */ 8, VIF_STATIC_DMA);
+
+    VU_ProgManagerInit(&vu_prog_mgr);
+    VU_InitMicroprogram(&vif_static_dma, &VU1Prog_Color_Triangles, VU1_MICROPROGRAM, /* offset = */ 0);
+    VU_UploadMicroprogram(&vu_prog_mgr, &vif_dynamic_dma, &VU1Prog_Color_Triangles,  /* index  = */ 0, /* force = */ true);
+    VIFDMA_Fire(&vif_dynamic_dma);
 
     // Set up the matrices; these never change in this test program:
     Mat4_MakeLookAt(&view_matrix, &camera_origin, &camera_lookat, &camera_up);
@@ -384,8 +639,12 @@ void Test_PS2_VU1Cubes(void)
     // Rotate the model, so it looks a little less boring.
     float rotation_angle = 0.0f; // In radians
 
+    // Create the geometry for a cube made of triangles:
     cube_t cube = {0};
-    MakeCube(&cube, 1.0f);
+    MakeCubeGeometry(&cube, 1.0f);
+
+    // Copy the geometry into a static DMA buffer that we'll resubmit repeated times.
+    const u32 cube_dma_addr = SetUpCubeDMA(&cube, &vif_static_dma);
 
     // Each cube has its own draw_data_t.
     draw_data_t dd0 = {0};
@@ -396,6 +655,43 @@ void Test_PS2_VU1Cubes(void)
     {
         PS2_BeginFrame(0);
 
+        // TODO WORK IN PROGRESS
+        /*
+        {
+            Mat4_MakeRotationX(&rotation_matrix, rotation_angle);
+            Mat4_MakeTranslation(&translation_matrix, 1.5f, -1.0f, 4.0f);
+
+            Mat4_Multiply(&model_matrix, &rotation_matrix, &translation_matrix);
+            Mat4_Multiply(&mvp_matrix, &model_matrix, &view_proj_matrix);
+
+            VIFDMA_AddUnpack(&vif_dynamic_dma, VIF_V4_32, 0, 4); // Unpack 4QW to VU memory addr 0
+
+            //VIFDMA_AddMatrix4F(&vif_dynamic_dma, (float *)&mvp_matrix);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[0][0]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[0][1]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[0][2]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[0][3]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[1][0]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[1][1]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[1][2]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[1][3]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[2][0]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[2][1]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[2][2]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[2][3]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[3][0]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[3][1]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[3][2]);
+            VIFDMA_AddFloat(&vif_dynamic_dma, mvp_matrix.m[3][3]);
+
+            // We can simply call the rest, which means the CPU doesn't have to do any work.
+            VIFDMA_DMACall(&vif_dynamic_dma, cube_dma_addr);
+
+            VIFDMA_Fire(&vif_dynamic_dma);
+        }
+        */
+
+        //*
         Mat4_MakeRotationX(&rotation_matrix, rotation_angle);
         Mat4_MakeTranslation(&translation_matrix, 1.5f, -1.0f, 4.0f);
 
@@ -419,6 +715,7 @@ void Test_PS2_VU1Cubes(void)
         Mat4_Multiply(&mvp_matrix, &model_matrix, &view_proj_matrix);
 
         DrawVU1Cube(&dd2, &mvp_matrix, &cube);
+        //*/
 
         rotation_angle += 0.02f;
         PS2_EndFrame();

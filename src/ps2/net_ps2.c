@@ -11,6 +11,7 @@
  * ================================================================================================ */
 
 #include "common/q_common.h"
+#include "ps2/defs_ps2.h"
 
 //
 // Local loopback (localhost) buffers, adapted from net_wins.c
@@ -35,7 +36,7 @@ typedef struct
 } loopback_t;
 
 // Alignment is not strictly necessary here, but might boost memcpy/memset perf.
-static loopback_t loopbacks[2] __attribute__((aligned(16)));
+static loopback_t loopbacks[2] PS2_ALIGN(16);
 
 //=============================================================================
 //

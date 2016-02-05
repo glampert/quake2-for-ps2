@@ -25,10 +25,16 @@
 #include <graph.h>
 #include <draw.h>
 
+//TODO:
+// All these static buffers we use in here and in teximage.c/model.c should
+// be allocated dynamically on the heap, so we can keep track of the used memory.
+// they are resident blocks, so the end result is the same as if we had
+// static memory, the difference is that we'd increment the mem tags.
+
 //=============================================================================
 
 // Renderer globals (alignment not strictly required, but shouldn't harm either...)
-ps2_refresh_t ps2ref __attribute__((aligned(16))) = {0};
+ps2_refresh_t ps2ref PS2_ALIGN(16) = {0};
 
 // Renderer perf counters for debugging and profiling:
 static int ps2_draws2d      = 0;
@@ -72,7 +78,7 @@ typedef struct
 
 enum
 {
-    DRAW2D_BATCH_SIZE         =  8500, // size of ps2_draw2d_batch[] in elements
+    DRAW2D_BATCH_SIZE         =  8000, // size of ps2_draw2d_batch[] in elements
     DRAW2D_TEX_INDEX_NO_TEX   = -1,    // used by quad->tex_index for non-textured quads
     DRAW2D_TEX_INDEX_FADE_SCR = -2     // dummy value for DrawFadeScreen tex_index
 };
@@ -88,7 +94,7 @@ static int ps2_fade_scr_index = -1;
 
 // 2D draw calls are always batched to try avoiding unnecessary texture switches.
 static int ps2_next_in_2d_batch = 0;
-static ps2_screen_quad_t ps2_draw2d_batch[DRAW2D_BATCH_SIZE] __attribute__((aligned(16)));
+static ps2_screen_quad_t ps2_draw2d_batch[DRAW2D_BATCH_SIZE] PS2_ALIGN(16);
 #define DRAW2D_NEXT_BATCH_ELEMENT() (&ps2_draw2d_batch[ps2_next_in_2d_batch++])
 
 //
@@ -104,12 +110,12 @@ static struct
 } ps2_cinematic_frame;
 
 // Palette provided by the game to expand 8bit cinematic frames.
-static u32 ps2_cinematic_palette[256] __attribute__((aligned(16)));
+static u32 ps2_cinematic_palette[256] PS2_ALIGN(16);
 
 // Cinematic frames are rendered into this RGB16 texture
 // and blitted to screen using a full-screen quadrilateral
 // that applies this buffer as texture.
-static u16 ps2_cinematic_buffer[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
+static u16 ps2_cinematic_buffer[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] PS2_ALIGN(16);
 
 // Built-in texture images that are always available (defined in tex_image.c):
 extern ps2_teximage_t * ps2_builtin_tex_conchars;
@@ -130,11 +136,6 @@ extern ps2_teximage_t * ps2_builtin_tex_debug;
 
 // Test if the texture pointer is from the scrap atlas.
 #define TEXIMAGE_IS_SCRAP(teximage_ptr) ((teximage_ptr)->u1 != 0 && (teximage_ptr)->v1 != 0)
-
-// SPR = Scratch Pad
-#define PS2_SPR_SIZE_QWORDS 0x4000     // 16 Kilobytes (16384 bytes).
-#define PS2_SPR_MEM_BEGIN   0x70000000 // Starting address of the Scratch Pad memory:
-#define PS2_UCAB_MEM_MASK   0x30000000 // ORing a pointer with this mask sets it to Uncached Accelerated (UCAB) space.
 
 //
 // Error checks:
@@ -177,7 +178,7 @@ extern ps2_teximage_t * ps2_builtin_tex_debug;
 PS2_PacketAlloc
 ================
 */
-void PS2_PacketAlloc(ps2_gspacket_t * packet, int qwords, int type)
+void PS2_PacketAlloc(ps2_gs_packet_t * packet, int qwords, int type)
 {
     int byte_size = 0;
 
@@ -214,7 +215,7 @@ void PS2_PacketAlloc(ps2_gspacket_t * packet, int qwords, int type)
 PS2_PacketFree
 ================
 */
-void PS2_PacketFree(ps2_gspacket_t * packet)
+void PS2_PacketFree(ps2_gs_packet_t * packet)
 {
     // Free the allocated data buffer (if any).
     if (packet->type == GS_PACKET_SPR)
@@ -241,11 +242,11 @@ void PS2_PacketFree(ps2_gspacket_t * packet)
 PS2_PacketReset
 ================
 */
-void PS2_PacketReset(ps2_gspacket_t * packet)
+void PS2_PacketReset(ps2_gs_packet_t * packet)
 {
     if (packet->type == GS_PACKET_SPR)
     {
-        (u8 *)packet->data = (u8 *)PS2_SPR_MEM_BEGIN;
+        (u32 *)packet->data = (u32 *)PS2_SPR_MEM_BEGIN;
         return;
     }
 
@@ -407,7 +408,7 @@ static void PS2_InitDrawingEnvironment(void)
 {
     // We can grab one of the frame_packets to this temp.
     // It is not in use yet.
-    ps2_gspacket_t * packet = &ps2ref.frame_packets[1];
+    ps2_gs_packet_t * packet = &ps2ref.frame_packets[1];
 
     // Set framebuffer and virtual screen offsets:
     qword_t * q = packet->data;
@@ -426,7 +427,7 @@ static void PS2_InitDrawingEnvironment(void)
 
     q = draw_finish(q);
     dma_channel_send_normal(DMA_CHANNEL_GIF, packet->data, (q - packet->data), 0, 0);
-    dma_wait_fast();
+    dma_wait_fast(); // -- Synchronize immediately.
 }
 
 /*
@@ -438,9 +439,9 @@ Remarks: Local function.
 */
 static void PS2_ClearScreen(void)
 {
-    static qword_t scrap_dma_buffer[64] __attribute__((aligned(16)));
-    qword_t * qwptr = scrap_dma_buffer;
+    static qword_t scrap_dma_buffer[64] PS2_ALIGN(16);
 
+    qword_t * qwptr  = scrap_dma_buffer;
     const int width  = viddef.width;
     const int height = viddef.height;
 
@@ -458,7 +459,6 @@ static void PS2_ClearScreen(void)
     qwptr = draw_enable_tests(qwptr, 0, &ps2ref.z_buffer);
     END_DMA_TAG(qwptr);
 
-    dma_wait_fast(); // -- Wait for previous to conclude.
     dma_channel_send_chain(DMA_CHANNEL_GIF, scrap_dma_buffer, 0, DMA_FLAG_TRANSFERTAG, 0);
     dma_wait_fast(); // -- Synchronize immediately.
 }
@@ -474,7 +474,7 @@ static void PS2_Draw2DBegin(void)
 {
     if (ps2ref.dmatag_draw2d != NULL)
     {
-        Sys_Error("Draw2DBegin: Already in 2D mode!");
+        Sys_Error("PS2_Draw2DBegin: Already in 2D mode!");
     }
 
     // Reference the external tag 'dmatag_draw2d':
@@ -1129,15 +1129,27 @@ PS2_WaitGSDrawFinish
 */
 void PS2_WaitGSDrawFinish(void)
 {
-    static qword_t scrap_dma_buffer[4] __attribute__((aligned(16)));
+    static qword_t scrap_dma_buffer[8] PS2_ALIGN(16);
+
     qword_t * qwptr = scrap_dma_buffer;
     qwptr = draw_finish(qwptr);
 
-    dma_wait_fast(); // -- Wait for previous to conclude.
     dma_channel_send_normal(DMA_CHANNEL_GIF, scrap_dma_buffer, (qwptr - scrap_dma_buffer), 0, 0);
     dma_wait_fast(); // -- Synchronize immediately.
 
     draw_wait_finish();
+}
+
+/*
+================
+PS2_SetClearColor
+================
+*/
+void PS2_SetClearColor(byte r, byte g, byte b)
+{
+    ps2ref.screen_color.r = r;
+    ps2ref.screen_color.g = g;
+    ps2ref.screen_color.b = b;
 }
 
 /*
@@ -1147,11 +1159,11 @@ PS2_BeginRegistration
 */
 void PS2_BeginRegistration(const char * map_name)
 {
-    // Viewcluster stuff:
+    // View cluster stuff:
     extern int ps2_view_cluster;
     extern int ps2_old_view_cluster;
 
-    // Stats counter for debug printing:
+    // Stats counters for debug printing:
     extern int ps2_teximage_cache_hits;
     extern int ps2_unused_teximages_freed;
     extern int ps2_teximages_failed;
@@ -1248,7 +1260,7 @@ void PS2_BeginFrame(float camera_separation)
     // Make sure we didn't screw ourselves since the last frame:
     if (ps2ref.frame_index > 1 || ps2ref.frame_started == true)
     {
-        Sys_Error("BeginFrame: Inconsistent frame states!!!");
+        Sys_Error("PS2_BeginFrame: Inconsistent frame states!!!");
     }
 
     // Reset these perf counters for the new frame:
@@ -1273,7 +1285,7 @@ void PS2_EndFrame(void)
 {
     if (ps2ref.frame_started == false)
     {
-        Sys_Error("EndFrame: Inconsistent frame states!!!");
+        Sys_Error("PS2_EndFrame: Inconsistent frame states!!!");
     }
 
     //
@@ -1426,7 +1438,7 @@ void PS2_TexImageVRamUpload(ps2_teximage_t * teximage)
         height = MAX_TEXIMAGE_SIZE;
     }
 
-    ps2_gspacket_t * packet = &ps2ref.tex_upload_packet[ps2ref.frame_index];
+    ps2_gs_packet_t * packet = &ps2ref.tex_upload_packet[ps2ref.frame_index];
     qword_t * q = packet->data;
 
     q = draw_texture_transfer(q, teximage->pic, width, height,

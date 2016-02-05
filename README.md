@@ -1,7 +1,7 @@
 
 # Quake II port for the PlayStation 2
 
-![quake console](https://raw.githubusercontent.com/glampert/quake2-for-ps2/master/misc/screens/sample-qconsole-ps2.jpg "quake console")
+![Raw level geometry](https://raw.githubusercontent.com/glampert/quake2-for-ps2/master/misc/screens/q2ps2-level-notex-2.png "Raw level geometry")
 
 ## Overview
 
@@ -12,8 +12,10 @@ This port relies on the free [PS2DEV SDK][link_ps2_dev] to provide rendering,
 input, audio and system services for the Quake Engine.
 
 The project is in early development stage, but 2D rendering of menus and cinematics
-is already implemented and working on both the emulator and the PS2, as you can see
-in the above screenshot of the in-game console running on the PS2.
+is already implemented and working on both the Emulator and the PS2.
+
+As you can see in the screenshot above, we also have some basic
+hardware-accelerated raw level geometry rendering implemented.
 
 The long term goal is to have a fully functional and playable (single-player)
 Quake II on the PlayStation 2, using only on the freely available tools and libraries.
@@ -29,3 +31,4 @@ You can also find a copy of the GPL version 2 [in here][link_gpl_v2].
 [link_id_repo]: https://github.com/id-Software/Quake-2
 [link_ps2_dev]: https://github.com/ps2dev
 [link_gpl_v2]:  https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
+

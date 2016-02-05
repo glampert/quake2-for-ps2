@@ -37,7 +37,7 @@ char * com_argv[MAX_NUM_ARGVS + 1];
 int realtime;
 int server_state;
 
-jmp_buf abortframe; // an ERR_DROP occured, exit the entire frame
+jmp_buf abortframe; // an ERR_DROP occurred, exit the entire frame
 
 FILE * log_stats_file;
 FILE * logfile;
@@ -135,7 +135,7 @@ void Com_Printf(const char * fmt, ...)
 
         if (!logfile)
         {
-            Com_sprintf(name, sizeof(name), "%s/qconsole.log", FS_Gamedir());
+            snprintf(name, sizeof(name), "%s/qconsole.log", FS_Gamedir());
             logfile = fopen(name, "w");
         }
         if (logfile)
@@ -1015,7 +1015,9 @@ Adds the given string at the end of the current argument list
 void COM_AddParm(char * parm)
 {
     if (com_argc == MAX_NUM_ARGVS)
+    {
         Com_Error(ERR_FATAL, "COM_AddParm: MAX_NUM)ARGS");
+    }
     com_argv[com_argc++] = parm;
 }
 

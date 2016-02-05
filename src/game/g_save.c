@@ -207,8 +207,11 @@ void InitGame(void)
     // items
     InitItems();
 
-    Com_sprintf(game.helpmessage1, sizeof(game.helpmessage1), "");
-    Com_sprintf(game.helpmessage2, sizeof(game.helpmessage2), "");
+    // LAMPERT: Why not memset in the fist place???
+    memset(game.helpmessage1, 0, sizeof(game.helpmessage1));
+    memset(game.helpmessage2, 0, sizeof(game.helpmessage2));
+    //Com_sprintf(game.helpmessage1, sizeof(game.helpmessage1), "");
+    //Com_sprintf(game.helpmessage2, sizeof(game.helpmessage2), "");
 
     // initialize all entities for this game
     game.maxentities = maxentities->value;

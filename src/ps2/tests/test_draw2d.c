@@ -51,10 +51,10 @@ static byte * CheckerPattern(byte color0, byte color1, int size, byte * buffer)
 static void InitTestScraps(void)
 {
     // These get copied into the scrap.
-    byte scrap_test_0[24 * 24] __attribute__((aligned(16)));
-    byte scrap_test_1[32 * 32] __attribute__((aligned(16)));
-    byte scrap_test_2[64 * 64] __attribute__((aligned(16)));
-    byte scrap_test_3[16 * 16] __attribute__((aligned(16)));
+    byte scrap_test_0[24 * 24] PS2_ALIGN(16);
+    byte scrap_test_1[32 * 32] PS2_ALIGN(16);
+    byte scrap_test_2[64 * 64] PS2_ALIGN(16);
+    byte scrap_test_3[16 * 16] PS2_ALIGN(16);
 
     // Color values are indexed into the global_palette.
     scrap_tex_0 = Img_ScrapAlloc(CheckerPattern(50,  65,  24, scrap_test_0), 24, 24, "scrap_test_0");
@@ -187,9 +187,7 @@ void Test_PS2_Draw2D(void)
     Com_Printf("====== QPS2 - Test_PS2_Draw2D ======\n");
 
     // Clear the screen to dark gray. Default color is black.
-    ps2ref.screen_color.r = 120;
-    ps2ref.screen_color.g = 120;
-    ps2ref.screen_color.b = 120;
+    PS2_SetClearColor(120, 120, 120);
 
     InitTestScraps();
 

@@ -14,6 +14,7 @@
 #define PS2_REFRESH_H
 
 #include "client/client.h"
+#include "ps2/defs_ps2.h"
 
 // PS2DEV SDK:
 #include <tamtypes.h>
@@ -31,7 +32,7 @@ PS2 renderer API types:
 // Defined by model_load.h, but we only need a forward decl here.
 typedef const struct ps2_mdl_surface_s * ps2_mdl_surface_ptr;
 
-// Misc renderer constants.
+// Miscellaneous renderer constants.
 enum
 {
     // 640x448 is the standard NTSC resolution.
@@ -42,7 +43,7 @@ enum
     MAX_TEXIMAGES      = 1024,
     MAX_TEXIMAGE_SIZE  = 256,
 
-    // ps2_gspacket_t constants:
+    // ps2_gs_packet_t constants:
     GS_PACKET_QWC_MAX  = 65535, // Maximum number of qwords allowed, but each channel has its own limitations.
     GS_PACKET_NORMAL   = 0x00,  // Normal EE RAM.
     GS_PACKET_UCAB     = 0x01,  // Uncached accelerated memory.
@@ -55,66 +56,66 @@ typedef struct
 {
     int type;
     int qwords;
-    qword_t * data __attribute__((aligned(64)));
-} ps2_gspacket_t;
+    qword_t * data PS2_ALIGN(64);
+} ps2_gs_packet_t;
 
 // Type tag for textures/images (used internally Quake2).
 // These can be ORed for image search criteria.
 typedef enum
 {
-    IT_NULL    = 0,                            // Uninitialized image. Used internally.
-    IT_SKIN    = (1 << 1),                     // Usually PCX.
-    IT_SPRITE  = (1 << 2),                     // Usually PCX.
-    IT_WALL    = (1 << 3),                     // Custom WALL format (miptex_t).
-    IT_SKY     = (1 << 4),                     // PCX or TGA.
-    IT_PIC     = (1 << 5),                     // Usually PCX.
-    IT_BUILTIN = (1 << 6)                      // Our hardcoded built-ins. Points to static memory.
+    IT_NULL    = 0,                              // Uninitialized image. Used internally.
+    IT_SKIN    = (1 << 1),                       // Usually PCX.
+    IT_SPRITE  = (1 << 2),                       // Usually PCX.
+    IT_WALL    = (1 << 3),                       // Custom WALL format (miptex_t).
+    IT_SKY     = (1 << 4),                       // PCX or TGA.
+    IT_PIC     = (1 << 5),                       // Usually PCX.
+    IT_BUILTIN = (1 << 6)                        // Our hardcoded built-ins. Points to static memory.
 } ps2_imagetype_t;
 
 // A texture or 2D image:
 typedef struct
 {
-    byte *              pic;                   // Pointer to heap memory, must be freed with PS2_TexImageFree.
-    ps2_imagetype_t     type;                  // Types of textures used by Quake. See ps2_imagetype_t.
-    u16                 width;                 // Width in pixels;  Must be > 0 && <= MAX_TEXIMAGE_SIZE.
-    u16                 height;                // Height in pixels; Must be > 0 && <= MAX_TEXIMAGE_SIZE.
-    u16                 mag_filter;            // One of the LOD_MAG_* from libdraw.
-    u16                 min_filter;            // One of the LOD_MIN_* from libdraw.
-    u16                 u0, v0;                // Offsets into the scrap if this is allocate from the scrap, zero otherwise.
-    u16                 u1, v1;                // If not zero, this is a scrap image. In such case, use these instead of w&h.
-    texbuffer_t         texbuf;                // GS texture buffer info from libdraw.
-    ps2_mdl_surface_ptr texture_chain;         // For sort-by-texture world drawing.
-    u32                 registration_sequence; // Registration num, so we know if it is currently referenced by the level being played.
-    u32                 hash;                  // Hash of the following string, for faster lookup.
-    char                name[MAX_QPATH];       // Name or id. If from a file, game path including extension.
+    byte *              pic;                     // Pointer to heap memory, must be freed with PS2_TexImageFree.
+    ps2_imagetype_t     type;                    // Types of textures used by Quake. See ps2_imagetype_t.
+    u16                 width;                   // Width in pixels;  Must be > 0 && <= MAX_TEXIMAGE_SIZE.
+    u16                 height;                  // Height in pixels; Must be > 0 && <= MAX_TEXIMAGE_SIZE.
+    u16                 mag_filter;              // One of the LOD_MAG_* from libdraw.
+    u16                 min_filter;              // One of the LOD_MIN_* from libdraw.
+    u16                 u0, v0;                  // Offsets into the scrap if this is allocate from the scrap, zero otherwise.
+    u16                 u1, v1;                  // If not zero, this is a scrap image. In such case, use these instead of w&h.
+    texbuffer_t         texbuf;                  // GS texture buffer info from libdraw.
+    ps2_mdl_surface_ptr texture_chain;           // For sort-by-texture world drawing.
+    u32                 registration_sequence;   // Registration num, so we know if it is currently referenced by the level being played.
+    u32                 hash;                    // Hash of the following string, for faster lookup.
+    char                name[MAX_QPATH];         // Name or id. If from a file, game path including extension.
 } ps2_teximage_t;
 
 // Common renderer state structure (AKA the "refresh" module):
 typedef struct
 {
-    qboolean         initialized;              // Flag to keep track of initialization of our global ps2ref.
-    qboolean         show_fps_count;           // Draws a frames per sec counter in the top-right corner of the screen.
-    qboolean         show_mem_tags;            // Draws a debug overlay with the current values of the memory tags.
-    qboolean         show_render_stats;        // Display a debug overlay with other miscellaneous renderer stats.
-    qboolean         frame_started;            // Set by BeginFrame, cleared at EndFrame. Some calls must be in between.
-    qboolean         registration_started;     // Set when between BeginRegistration/EndRegistration.
-    u32              registration_sequence;    // Bumped each BeginRegistration. Any loaded model/image not matching it is freed on EndRegistration.
-    zbuffer_t        z_buffer;                 // PS2 depth buffer information.
-    framebuffer_t    frame_buffers[2];         // PS2 color framebuffers (double buffered).
-    ps2_gspacket_t   frame_packets[2];         // Big packets for all the drawings in a frame.
-    ps2_gspacket_t   tex_upload_packet[2];     // Scratch packets used only for texture uploads to VRam.
-    ps2_gspacket_t   flip_fb_packet;           // Small UCAB packet used to flip the frame buffers.
-    ps2_gspacket_t * current_frame_packet;     // One of the frame_packets[] pointers for current frame.
-    qword_t *        current_frame_qwptr;      // Pointer to the qword_ts of current_frame_packet.
-    qword_t *        dmatag_draw2d;            // Gif tag used by the 2D mode.
-    color_t          screen_color;             // Color used to wipe the screen on BeginFrame.
-    u32              ui_brightness;            // From 0 to 255, defines the color added to the 2D UI textures, such as text.
-    u32              fade_scr_alpha;           // How dark to fade the screen: 255=totally black, 0=no fade.
-    u32              frame_index;              // Index of the current frame buffer.
-    u32              vram_used_bytes;          // Bytes of VRam currently committed.
-    u32              vram_texture_start;       // Start of VRam after screen buffers where we can alloc textures.
-    ps2_teximage_t * current_tex;              // Pointer to the current game texture in VRam (points to teximages[]).
-    ps2_teximage_t   teximages[MAX_TEXIMAGES]; // All the textures used by a game level must fit in here!
+    qboolean          initialized;               // Flag to keep track of initialization of our global ps2ref.
+    qboolean          show_fps_count;            // Draws a frames per sec counter in the top-right corner of the screen.
+    qboolean          show_mem_tags;             // Draws a debug overlay with the current values of the memory tags.
+    qboolean          show_render_stats;         // Display a debug overlay with other miscellaneous renderer stats.
+    qboolean          frame_started;             // Set by BeginFrame, cleared at EndFrame. Some calls must be in between.
+    qboolean          registration_started;      // Set when between BeginRegistration/EndRegistration.
+    u32               registration_sequence;     // Bumped each BeginRegistration. Any loaded model/image not matching it is freed on EndRegistration.
+    zbuffer_t         z_buffer;                  // PS2 depth buffer information.
+    framebuffer_t     frame_buffers[2];          // PS2 color framebuffers (double buffered).
+    ps2_gs_packet_t   frame_packets[2];          // Big packets for all the drawings in a frame.
+    ps2_gs_packet_t   tex_upload_packet[2];      // Scratch packets used only for texture uploads to VRam.
+    ps2_gs_packet_t   flip_fb_packet;            // Small UCAB packet used to flip the frame buffers.
+    ps2_gs_packet_t * current_frame_packet;      // One of the frame_packets[] pointers for current frame.
+    qword_t *         current_frame_qwptr;       // Pointer to the qword_ts of current_frame_packet.
+    qword_t *         dmatag_draw2d;             // GIF tag used by the 2D mode.
+    color_t           screen_color;              // Color used to wipe the screen on BeginFrame.
+    u32               ui_brightness;             // From 0 to 255, defines the color added to the 2D UI textures, such as text.
+    u32               fade_scr_alpha;            // How dark to fade the screen: 255=totally black, 0=no fade.
+    u32               frame_index;               // Index of the current frame buffer.
+    u32               vram_used_bytes;           // Bytes of VRam currently committed.
+    u32               vram_texture_start;        // Start of VRam after screen buffers where we can alloc textures.
+    ps2_teximage_t *  current_tex;               // Pointer to the current game texture in VRam (points to teximages[]).
+    ps2_teximage_t    teximages[MAX_TEXIMAGES];  // All the textures used by a game level + UI must fit in here!
 } ps2_refresh_t;
 
 // Renderer globals:
@@ -164,6 +165,7 @@ void PS2_RenderFrame(refdef_t * view_def);
 void PS2_DrawFrameSetup(const refdef_t * view_def);
 void PS2_DrawWorldModel(refdef_t * view_def);
 void PS2_DrawViewEntities(refdef_t * view_def);
+void PS2_SetClearColor(byte r, byte g, byte b);
 
 /*
  * 2D overlay rendering (origin at the top-left corner of the screen):
@@ -196,9 +198,9 @@ void PS2_AppActivate(qboolean activate);
  * GS render packet helpers:
  */
 
-void PS2_PacketAlloc(ps2_gspacket_t * packet, int qwords, int type);
-void PS2_PacketFree(ps2_gspacket_t * packet);
-void PS2_PacketReset(ps2_gspacket_t * packet);
+void PS2_PacketAlloc(ps2_gs_packet_t * packet, int qwords, int type);
+void PS2_PacketFree(ps2_gs_packet_t * packet);
+void PS2_PacketReset(ps2_gs_packet_t * packet);
 void PS2_WaitGSDrawFinish(void);
 
 /*

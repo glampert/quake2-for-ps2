@@ -743,9 +743,9 @@ MISC
 
 void Com_BeginRedirect(int target, char * buffer, int buffersize, void(*flush));
 void Com_EndRedirect(void);
-void Com_Printf(const char * fmt, ...) __attribute__((format(printf, 1, 2)));
-void Com_DPrintf(const char * fmt, ...) __attribute__((format(printf, 1, 2)));
-void Com_Error(int code, const char * fmt, ...) __attribute__((format(printf, 2, 3)));
+void Com_Printf(const char * fmt, ...) Q_PRINTF_FUNC(1, 2);
+void Com_DPrintf(const char * fmt, ...) Q_PRINTF_FUNC(1, 2);
+void Com_Error(int code, const char * fmt, ...) Q_PRINTF_FUNC(2, 3);
 void Com_Quit(void);
 
 int Com_ServerState(void); // this should have just been a cvar...
@@ -804,7 +804,7 @@ char * Sys_ConsoleInput(void);
 void Sys_ConsoleOutput(const char * string);
 void Sys_SendKeyEvents(void);
 
-void Sys_Error(const char * error, ...) __attribute__((format(printf, 1, 2)));
+void Sys_Error(const char * error, ...) Q_PRINTF_FUNC(1, 2);
 void Sys_Quit(void);
 
 char * Sys_GetClipboardData(void);

@@ -13,6 +13,8 @@
 #ifndef PS2_VEC_MAT_H
 #define PS2_VEC_MAT_H
 
+#include "ps2/defs_ps2.h"
+
 /*
 ==============================================================
 
@@ -30,7 +32,7 @@ typedef struct
     float y;
     float z;
     float w;
-} m_vec4_t __attribute__((aligned(16)));
+} m_vec4_t PS2_ALIGN(16);
 
 m_vec4_t * Vec4_Set3(m_vec4_t * dest, float x, float y, float z);
 m_vec4_t * Vec4_Set4(m_vec4_t * dest, float x, float y, float z, float w);
@@ -78,7 +80,7 @@ matrices. ROW-MAJOR format. Z+ goes into the screen.
 typedef struct
 {
     float m[4][4];
-} m_mat4_t __attribute__((aligned(16)));
+} m_mat4_t PS2_ALIGN(16);
 
 m_mat4_t * Mat4_Set(m_mat4_t * m, float m11, float m12, float m13, float m14,
                                   float m21, float m22, float m23, float m24,

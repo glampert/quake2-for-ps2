@@ -166,19 +166,26 @@ void SVC_Info(void)
     int version;
 
     if (maxclients->value == 1)
+    {
         return; // ignore in single player
+    }
 
     version = atoi(Cmd_Argv(1));
 
     if (version != PROTOCOL_VERSION)
-        Com_sprintf(string, sizeof(string), "%s: wrong version\n", hostname->string, sizeof(string));
+    {
+        Com_sprintf(string, sizeof(string), "%s: wrong version\n", hostname->string);
+    }
     else
     {
         count = 0;
         for (i = 0; i < maxclients->value; i++)
+        {
             if (svs.clients[i].state >= cs_connected)
+            {
                 count++;
-
+            }
+        }
         Com_sprintf(string, sizeof(string), "%16s %8s %2i/%2i\n", hostname->string, sv.name, count, (int)maxclients->value);
     }
 

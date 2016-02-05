@@ -69,7 +69,7 @@ static cplane_t ps2_frustum[4];
 
 // Buffer to decompress a cluster PVS.
 // Alignment not strictly necessary, but might help the compiler since PS2 likes aligned data.
-static byte ps2_dvis_pvs[MAX_MAP_LEAFS / 8] __attribute__((aligned(16)));
+static byte ps2_dvis_pvs[MAX_MAP_LEAFS / 8] PS2_ALIGN(16);
 
 // Color table used for debug coloring of surfaces.
 static const int NUM_DEBUG_COLORS = 25;
@@ -381,7 +381,7 @@ static void PS2_MarkLeaves(ps2_model_t * world_mdl)
     }
 
     byte * vis = PS2_GetClusterPVS(ps2_view_cluster, world_mdl);
-    byte fat_vis[MAX_MAP_LEAFS / 8] __attribute__((aligned(16)));
+    byte fat_vis[MAX_MAP_LEAFS / 8] PS2_ALIGN(16);
 
     // May have to combine two clusters because of solid water boundaries:
     if (ps2_view_cluster2 != ps2_view_cluster)
@@ -617,7 +617,7 @@ typedef struct
     float    gs_scale_y;
     float    gs_scale_z;
     int      vert_count;
-} vu_batch_data_t __attribute__((packed, aligned(16)));
+} vu_batch_data_t PS2_ALIGN(16);
 
 static inline int CountVertexLoops(float vertex_qwords, float num_regs)
 {
@@ -639,7 +639,6 @@ static vu_batch_data_t * ps2_current_batch_data = NULL;
 static u64 * ps2_current_giftag = NULL;
 
 static int ps2_vu_batch_vert_count = 0;
-
 static int ps2_num_vu_batches = 0; // for printing
 
 //FIXME END TEMP
@@ -802,7 +801,7 @@ static void PS2_DrawTextureChains(void)
                 continue;
             }
 
-            //FIXME TEMP
+            //FIXME TEMP WORK IN PROGRESS
             const int num_triangles = poly->num_verts - 2;
             if (num_triangles >= MAX_TRIS_PER_VU_BATCH)
             {

@@ -26,3 +26,6 @@
 - Changed the Hunk_Alloc API so that it returns a user struct.
   This removed the need for additional global state.
 
+- Added GCC '__attribute__(format)' checking to the vararg functions.
+  Surprisingly few warnings were raised by that!
+

@@ -793,7 +793,9 @@ int Q_log2(int val)
 {
     int answer = 0;
     while (val >>= 1)
+    {
         answer++;
+    }
     return answer;
 }
 
@@ -936,17 +938,17 @@ qboolean bigendien;
 // mess up when qcommon is included in multiple places
 short (*_BigShort)(short l);
 short (*_LittleShort)(short l);
-int (*_BigLong)(int l);
-int (*_LittleLong)(int l);
+int   (*_BigLong)(int l);
+int   (*_LittleLong)(int l);
 float (*_BigFloat)(float l);
 float (*_LittleFloat)(float l);
 
-short BigShort(short l) { return _BigShort(l); }
-short LittleShort(short l) { return _LittleShort(l); }
-int BigLong(int l) { return _BigLong(l); }
-int LittleLong(int l) { return _LittleLong(l); }
-float BigFloat(float l) { return _BigFloat(l); }
-float LittleFloat(float l) { return _LittleFloat(l); }
+short BigShort(short l)     { return _BigShort(l); }
+short LittleShort(short l)  { return _LittleShort(l); }
+int   BigLong(int l)        { return _BigLong(l); }
+int   LittleLong(int l)     { return _LittleLong(l); }
+float BigFloat(float l)     { return _BigFloat(l); }
+float LittleFloat(float l)  { return _LittleFloat(l); }
 
 short ShortSwap(short l)
 {
@@ -1008,27 +1010,27 @@ Swap_Init
 */
 void Swap_Init(void)
 {
-    byte swaptest[2] = { 1, 0 };
+    const byte swaptest[2] = { 1, 0 };
 
     // set the byte swapping variables in a portable manner
-    if (*(short *)swaptest == 1)
+    if (*(const short *)swaptest == 1)
     {
-        bigendien = false;
-        _BigShort = ShortSwap;
+        bigendien    = false;
+        _BigShort    = ShortSwap;
         _LittleShort = ShortNoSwap;
-        _BigLong = LongSwap;
-        _LittleLong = LongNoSwap;
-        _BigFloat = FloatSwap;
+        _BigLong     = LongSwap;
+        _LittleLong  = LongNoSwap;
+        _BigFloat    = FloatSwap;
         _LittleFloat = FloatNoSwap;
     }
     else
     {
-        bigendien = true;
-        _BigShort = ShortNoSwap;
+        bigendien    = true;
+        _BigShort    = ShortNoSwap;
         _LittleShort = ShortSwap;
-        _BigLong = LongNoSwap;
-        _LittleLong = LongSwap;
-        _BigFloat = FloatNoSwap;
+        _BigLong     = LongNoSwap;
+        _LittleLong  = LongSwap;
+        _BigFloat    = FloatNoSwap;
         _LittleFloat = FloatSwap;
     }
 }
@@ -1046,15 +1048,16 @@ char * va(const char * format, ...)
 	// Modified to use multiple buffers, like on Doom3.
     enum
     {
+        NUM_VA_BUFS   = 2, // Two should be good enough. Original Quake2 relied on just one...
         MAX_BUF_CHARS = 2048
     };
 
     // Multiple buffers, in case called by nested functions.
-    static int index = 0;
-    static char strings[4][MAX_BUF_CHARS];
+    static int  index = 0;
+    static char strings[NUM_VA_BUFS][MAX_BUF_CHARS];
 
     char * bufptr = strings[index];
-    index = (index + 1) & 3;
+    index = (index + 1) & (NUM_VA_BUFS - 1);
 
     va_list argptr;
     va_start(argptr, format);
@@ -1070,6 +1073,11 @@ char * va(const char * format, ...)
     return bufptr;
 }
 
+/*
+==============
+com_token[] buffer, used by the following COM_Parse() function.
+==============
+*/
 char com_token[MAX_TOKEN_CHARS];
 
 /*
@@ -1228,18 +1236,24 @@ void Com_sprintf(char * dest, int size, const char * fmt, ...)
 {
 	// LAMPERT: made the print buffer a bit smaller and also static.
 	// It was crazy big for a stack variable on the PS2!
+    static char bigbuffer[8192];
 
-    int len;
     va_list argptr;
-    static char bigbuffer[0x4000]; // 16KB
-
     va_start(argptr, fmt);
-    len = vsnprintf(bigbuffer, sizeof(bigbuffer), fmt, argptr);
+    int len = vsnprintf(bigbuffer, sizeof(bigbuffer), fmt, argptr);
     va_end(argptr);
+
+    if (len <= 0)
+    {
+        memset(dest, 0, size);
+        return;
+    }
 
     if (len >= size)
     {
-        Com_Printf("Com_sprintf: Overflow of %i in %i\n", len, size);
+        Com_DPrintf("WARNING: Com_sprintf overflow of %i in %i\n", len, size);
+        len = size - 1;        // Truncate.
+        bigbuffer[len] = '\0'; // Ensure null terminated.
     }
 
     strncpy(dest, bigbuffer, size - 1);
@@ -1263,10 +1277,10 @@ key and returns the associated value, or an empty string.
 */
 char * Info_ValueForKey(char * s, char * key)
 {
-    char pkey[512];
+    static int valueindex;
     static char value[2][512]; // use two buffers so compares
                                // work without stomping on each other
-    static int valueindex;
+    char pkey[512];
     char * o;
 
     valueindex ^= 1;

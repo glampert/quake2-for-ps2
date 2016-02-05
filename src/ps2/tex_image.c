@@ -120,7 +120,7 @@ static u16 * MakeCheckerPattern(void) // RGBA 16bits
         RGBA16(255, 100, 255, 255), // pink
         RGBA16(0, 0, 0, 255)        // black
     };
-    static u16 buffer[CHECKER_DIM * CHECKER_DIM] __attribute__((aligned(16)));
+    static u16 buffer[CHECKER_DIM * CHECKER_DIM] PS2_ALIGN(16);
 
     int x, y, colorindex;
     for (y = 0; y < CHECKER_DIM; ++y)
@@ -770,8 +770,8 @@ void Img_Resample32(const u32 * restrict in_img, int in_width, int in_height,
     const byte * pix4;
 
     // 512 is the max output w|h. We only really use up to 256 (MAX_TEXIMAGE_SIZE).
-    u32 p1[512] __attribute__((aligned(16)));
-    u32 p2[512] __attribute__((aligned(16)));
+    u32 p1[512] PS2_ALIGN(16);
+    u32 p2[512] PS2_ALIGN(16);
 
     const u32 fracstep = in_width * 0x10000 / out_width;
 
@@ -822,14 +822,14 @@ reducing the number of texture switches when rendering.
 */
 ps2_teximage_t * Img_ScrapAlloc(const byte * pic8in, int w, int h, const char * pic_name)
 {
-    static int scrap_allocated[MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
-    static u32 scrap_pixels[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
+    static int scrap_allocated[MAX_TEXIMAGE_SIZE] PS2_ALIGN(16);
+    static u32 scrap_pixels[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] PS2_ALIGN(16);
 
     int i, j, k;
     int sx, sy;
     int best, best2;
     ps2_teximage_t * scrap_teximage;
-    u32 temp_pic32[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] __attribute__((aligned(16)));
+    u32 temp_pic32[MAX_TEXIMAGE_SIZE * MAX_TEXIMAGE_SIZE] PS2_ALIGN(16);
 
     sx = sy = 0;
     best = MAX_TEXIMAGE_SIZE;
@@ -944,7 +944,7 @@ qboolean PCX_LoadFromMemory(const char * filename, const byte * data, int data_l
     // Get the palette:
     if (palette != NULL)
     {
-        byte temp_pal[PCX_PAL_SIZE_BYTES] __attribute__((aligned(16)));
+        byte temp_pal[PCX_PAL_SIZE_BYTES] PS2_ALIGN(16);
         memcpy(temp_pal, (const byte *)pcx + data_len - PCX_PAL_SIZE_BYTES, PCX_PAL_SIZE_BYTES);
 
         // Adjust the palette and fix byte order if needed:

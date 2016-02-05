@@ -32,7 +32,7 @@
     ftoi4.xyz vertex, vertex
 #endmacro
 
-; Load a vertex, transform it, perspective-divide, clip and covert to GS format.
+; Load a vertex, transform it, clip, perspective-divide, and covert to GS format.
 #macro DoVertex: vertoffset, vertptr, vertex, scales, mvpmatrix
     lq vertex, vertoffset(vertptr)
 

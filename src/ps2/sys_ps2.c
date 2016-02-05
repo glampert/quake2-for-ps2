@@ -13,6 +13,7 @@
 #include "common/q_common.h"
 #include "ps2/debug_print.h"
 #include "ps2/mem_alloc.h"
+#include "ps2/defs_ps2.h"
 #include "game/game.h" // For GetGameAPI()
 
 // PS2DEV SDK:
@@ -149,7 +150,7 @@ Sys_PrintLoadedIOPModules
 */
 void Sys_PrintLoadedIOPModules(int max_modules, void (*printer)(const char *, ...))
 {
-    static char module_name_str[128] __attribute__((aligned(64)));
+    static char module_name_str[128] PS2_ALIGN(64);
 
     smod_mod_info_t module_info;
     SifRpcReceiveData_t rpc_data;

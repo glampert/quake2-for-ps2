@@ -13,6 +13,8 @@
 #ifndef PS2_DEBUG_PRINT_H
 #define PS2_DEBUG_PRINT_H
 
+#include "common/q_common.h"
+
 // Char printing invariants:
 enum
 {
@@ -29,7 +31,7 @@ void Dbg_ScrPrintChar(int x, int y, unsigned int color, int ch);
 
 // Print at current position moving the cursor and handling newlines.
 // Uses the currently set text and background colors.
-void Dbg_ScrPrintf(const char * format, ...) __attribute__((format(printf, 1, 2)));
+void Dbg_ScrPrintf(const char * format, ...) Q_PRINTF_FUNC(1, 2);
 
 // Get/set the current text position used by Dbg_ScrPrintf.
 int Dbg_ScrGetPrintPosX(void);
