@@ -20,7 +20,9 @@ hardware-accelerated raw level geometry rendering implemented.
 The long term goal is to have a fully functional and playable (single-player)
 Quake II on the PlayStation 2, using only on the freely available tools and libraries.
 
-I am not able to actively update this project at the moment, so contributions are very welcome!
+### Contributors wanted:
+
+I'm not able to actively update and maintain this project at the moment, so contributions are very welcome!
 If you know C programming well and the basics of games programming and would like to contribute,
 the main missing features right now are (with estimated difficulty between the `()`):
 
