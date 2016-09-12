@@ -20,6 +20,20 @@ hardware-accelerated raw level geometry rendering implemented.
 The long term goal is to have a fully functional and playable (single-player)
 Quake II on the PlayStation 2, using only on the freely available tools and libraries.
 
+I am not able to actively update this project at the moment, so contributions are very welcome!
+If you know C programming well and the basics of games programming and would like to contribute,
+the main missing features right now are (with estimated difficulty between the `()`):
+
+- Finish Vector Unit-accelerated rendering (medium, but requires knowledge of the hardware)
+- Add texture mapping, lightmaps and dynamic lights (medium/hard, same as above)
+- Add sound rendering/mixing for the PS2 (hard, very limited memory left for audio!)
+- Add gamepad input (easy)
+- Hook `dlmalloc` (easy)
+- Optimize memory allocation/usage as much as possible (medium)
+- Optimize rendering to ensure smooth 30fps gameplay (medium/hard, it depends...)
+
+If you'd like to help/are keen to play the game on your old PS2, let me know!
+
 ## License
 
 Quake II was originally released as GPL, and it remains as such. New code written
