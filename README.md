@@ -1,7 +1,7 @@
 
 # Quake II port for the PlayStation 2
 
-**NOTE: This projet is no longer active and there are no plans to continue development on it.**
+**NOTE: This project is no longer active and there are no plans to continue development.**
 
 ![Raw level geometry](https://raw.githubusercontent.com/glampert/quake2-for-ps2/master/misc/screens/q2ps2-level-notex-2.png "Raw level geometry")
 
