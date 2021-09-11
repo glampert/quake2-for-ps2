@@ -1,6 +1,8 @@
 
 # Quake II port for the PlayStation 2
 
+**NOTE: This projet is no longer active and there are no plans to continue development on it.**
+
 ![Raw level geometry](https://raw.githubusercontent.com/glampert/quake2-for-ps2/master/misc/screens/q2ps2-level-notex-2.png "Raw level geometry")
 
 ## Overview
@@ -12,29 +14,23 @@ This port relies on the free [PS2DEV SDK][link_ps2_dev] to provide rendering,
 input, audio and system services for the Quake Engine.
 
 The project is in early development stage, but 2D rendering of menus and cinematics
-is already implemented and working on both the Emulator and the PS2.
+is implemented and working on both the PCX2 Emulator and the PS2.
 
-As you can see in the screenshot above, we also have some basic
+As shown in the screenshot above, we also have some basic
 hardware-accelerated raw level geometry rendering implemented.
 
-The long term goal is to have a fully functional and playable (single-player)
+The long term goal would be to have a fully functional and playable (single-player)
 Quake II on the PlayStation 2, using only on the freely available tools and libraries.
 
-### Contributors wanted:
+Some of the main features still missing are:
 
-I'm not able to actively update and maintain this project at the moment, so contributions are very welcome!
-If you know C programming well and the basics of games programming and would like to contribute,
-the main missing features right now are (with estimated difficulty between the `()`):
-
-- Finish Vector Unit-accelerated rendering (medium, but requires knowledge of the hardware)
-- Add texture mapping, lightmaps and dynamic lights (medium/hard, same as above)
-- Add sound rendering/mixing for the PS2 (hard, very limited memory left for audio!)
-- Add gamepad input (easy)
-- Hook `dlmalloc` (easy)
-- Optimize memory allocation/usage as much as possible (medium)
-- Optimize rendering to ensure smooth 30fps gameplay (medium/hard, it depends...)
-
-If you'd like to help/are keen to play the game on your old PS2, let me know!
+- Finish Vector Unit-accelerated rendering
+- Add texture mapping, lightmaps and dynamic lights
+- Add sound rendering/mixing for the PS2
+- Add gamepad input
+- Hook `dlmalloc`
+- Optimize memory allocation/usage as much as possible
+- Optimize rendering to ensure smooth 30fps gameplay
 
 ## License
 
