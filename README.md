@@ -14,7 +14,7 @@ This port relies on the free [PS2DEV SDK][link_ps2_dev] to provide rendering,
 input, audio and system services for the Quake Engine.
 
 The project is in early development stage, but 2D rendering of menus and cinematics
-is implemented and working on both the PCX2 Emulator and the PS2.
+is implemented and working on both the PCSX2 Emulator and the PS2.
 
 As shown in the screenshot above, we also have some basic
 hardware-accelerated raw level geometry rendering implemented.
