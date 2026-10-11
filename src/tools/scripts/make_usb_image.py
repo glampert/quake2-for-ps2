@@ -5,8 +5,10 @@
 #
 # Uses macOS hdiutil to make a writable, raw MBR/FAT32 image, rather than a CD ISO. Both ELF
 # configurations sit beside one baseq2 copy at the volume root. Only the stripped ELFs are copied.
-# The unpacked baseq2/pak0 tree is redundant when pak0.pak is available, so only that directory
-# is omitted in that case. Music includes only ADP tracks. No build is run by this script.
+# The game loads a compressed pakN.pkz in place of pakN.pak (ps2/fs/pkz_pack.h), so of a pair only
+# the pkz is copied, or only the pak with --uncompressed-paks, for comparing the two on a console.
+# The unpacked baseq2/pak0 tree is redundant when pak0.pak or pak0.pkz is available, so that
+# directory is omitted in that case. Music includes only ADP tracks. No build is run by this script.
 #
 # This source code is released under the GNU GPL v2 license.
 # Check the accompanying LICENSE file for details.
@@ -17,7 +19,8 @@
 Image layout:
     quake2_debug.elf
     quake2_release.elf
-    baseq2/                   (working copy, including config.cfg; ADP music only)
+    baseq2/                   (working copy, including config.cfg; ADP music only; of a
+                               pakN.pak/pakN.pkz pair, the pkz unless --uncompressed-paks)
 
 Run `make` and `make release` first. In PCSX2, select this .img as the USB Mass Storage
 Device backing image, then launch either ELF from uLaunchELF. Exit PCSX2 before replacing
@@ -47,6 +50,8 @@ def ParseArgs(argv=None):
                         help="image size in MiB; default: payload plus free space, at least 256")
     parser.add_argument("-f", "--force", action="store_true",
                         help="replace an existing image after successful creation")
+    parser.add_argument("--uncompressed-paks", action="store_true",
+                        help="of a pakN.pak/pakN.pkz pair, copy the pak rather than the pkz")
     return parser.parse_args(argv)
 
 
@@ -62,13 +67,29 @@ def ValidateSources(repoRoot):
     return gameData
 
 
-def StageFiles(repoRoot, gameData, staging):
-    omitPak0 = (gameData / "pak0.pak").is_file() and (gameData / "pak0").is_dir()
+def OmittedPacks(gameData, uncompressedPaks):
+    # The game loads pakN.pkz instead of pakN.pak when both are there, so one of a pair is dead
+    # weight: the pak by default, the pkz when the image is to load uncompressed.
+    omitted = []
+    for index in range(10):
+        pak = gameData / f"pak{index}.pak"
+        pkz = gameData / f"pak{index}.pkz"
+        if pak.is_file() and pkz.is_file():
+            omitted.append(pkz.name if uncompressedPaks else pak.name)
+    return omitted
+
+
+def StageFiles(repoRoot, gameData, staging, uncompressedPaks=False):
+    hasPak0 = (gameData / "pak0.pak").is_file() or (gameData / "pak0.pkz").is_file()
+    omitPak0 = hasPak0 and (gameData / "pak0").is_dir()
+    omittedPacks = OmittedPacks(gameData, uncompressedPaks)
     musicDirectory = gameData / "music"
 
     def IgnoreSourceFiles(directory, names):
         directory = Path(directory)
         ignored = ["pak0"] if omitPak0 and directory == gameData and "pak0" in names else []
+        if directory == gameData:
+            ignored.extend(name for name in names if name in omittedPacks)
         if directory == musicDirectory or musicDirectory in directory.parents:
             ignored.extend(name for name in names
                            if not (directory / name).is_dir() and Path(name).suffix.lower() != ".adp")
@@ -78,7 +99,7 @@ def StageFiles(repoRoot, gameData, staging):
     for config in ("debug", "release"):
         source = repoRoot / "build" / config / "quake2.elf"
         shutil.copy2(source, staging / f"quake2_{config}.elf")
-    return omitPak0
+    return omitPak0, omittedPacks
 
 
 def MeasurePayload(staging):
@@ -109,7 +130,7 @@ def ImageSizeMib(payloadBytes, entries, requestedSize):
     return ((desiredSize + 31) // 32) * 32
 
 
-def CreateImage(repoRoot, output, requestedSize=None, force=False):
+def CreateImage(repoRoot, output, requestedSize=None, force=False, uncompressedPaks=False):
     gameData = ValidateSources(repoRoot)
     # The image must not become part of the game-data copy on subsequent invocations.
     if output == gameData or gameData in output.parents:
@@ -131,14 +152,17 @@ def CreateImage(repoRoot, output, requestedSize=None, force=False):
     with tempfile.TemporaryDirectory(prefix=".quake2-usb-", dir=output.parent) as temporary:
         working = Path(temporary)
         staging = working / "files"
-        omitPak0 = StageFiles(repoRoot, gameData, staging)
+        omitPak0, omittedPacks = StageFiles(repoRoot, gameData, staging, uncompressedPaks)
         payloadBytes, entries = MeasurePayload(staging)
         sizeMib = ImageSizeMib(payloadBytes, entries, requestedSize)
         rawImage = working / "usb.cdr"
         print(f"Creating {sizeMib} MiB FAT32 image ({payloadBytes / MIB:.1f} MiB of files)...",
               flush=True)
         if omitPak0:
-            print("Omitting baseq2/pak0/ because baseq2/pak0.pak is present.", flush=True)
+            print("Omitting baseq2/pak0/ because baseq2/pak0.pak or pak0.pkz is present.", flush=True)
+        for name in omittedPacks:
+            kept = name[:-4] + (".pak" if name.endswith(".pkz") else ".pkz")
+            print(f"Omitting baseq2/{name}: the image carries baseq2/{kept} instead.", flush=True)
         subprocess.run([hdiutil, "create", "-size", f"{sizeMib}m", "-fs", "MS-DOS FAT32",
                         "-layout", "MBRSPUD", "-volname", "Q2PS2", "-srcfolder", str(staging),
                         "-format", "UDTO", "-nospotlight", str(rawImage)],
@@ -163,7 +187,7 @@ def Main(argv=None):
     # Resolve the parent only: --force replaces a destination symlink rather than its target.
     output = output.parent.resolve() / output.name
     try:
-        CreateImage(repoRoot, output, args.size_mib, args.force)
+        CreateImage(repoRoot, output, args.size_mib, args.force, args.uncompressed_paks)
     except subprocess.CalledProcessError as error:
         detail = (error.stderr or error.stdout or "no diagnostic output").strip()
         print(f"error: hdiutil failed (exit {error.returncode}): {detail}", file=sys.stderr)

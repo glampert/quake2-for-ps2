@@ -75,7 +75,11 @@ paths:
   iomanX/fileXio. Boot probes host, then HDD/PFS, then USB/BDM before `Qcommon_Init`.
 - **HDD drivers and limits:** standard `ps2hdd.irx` already uses iomanX; the separately named
   `ps2hdd-iomanx.irx` is a virtual-disk variant without DEV9/ATAD. Use ps2dev9 → ps2atad →
-  ps2hdd → ps2fs. Missing hardware/failed HDD init must fall through to USB. APA's default
+  ps2hdd → ps2fs. Missing hardware/failed HDD init must fall through to USB. **Don't skip
+  them on a console that has an HDD:** a temporary build that went straight to the USB chain
+  hung on a black screen at boot on the user's console with an HDD attached (2026-10-11),
+  and the same code with the probe back booted from USB. Not diagnosed; PCSX2 with an HDD
+  image didn't reproduce it. To test USB there, move the HDD copy aside. APA's default
   one open handle cannot enumerate while PFS is mounted; boot uses `-o 4 -n 20`. PFS's
   default two open files cannot cover pak/music/log/asset reads; boot uses `-m 1 -o 16 -n 40`,
   supplying NUL-separated args. Cache buffers must be at least `2 * maxOpen + 8`.
@@ -94,6 +98,10 @@ paths:
   failure. Sync uses the default blocking `FXIO_WAIT` mode and returns a negative SDK error
   directly rather than setting libc errno. The original missing-log diagnosis remains
   unconfirmed until a new HDD run; the available emulator log was from a later host run.
+- **`fileXioSetRWBufferSize` frees the old buffer before allocating the new one**, and on
+  failure keeps a null buffer and the new size (fileXio_iop.c), so every later read would
+  DMA from IOP address 0. On a nonzero result, set the stock 16 KB again (`SetFileXioBuffer`
+  in iop_boot.cpp). Read sizes per layer are in [performance.md](performance.md).
 - **USB presence is not module-loader readiness.** HDD success has reset/patched the IOP
   without starting usbd. Track those separately so keyboard startup starts usbd exactly
   when required, without repatching the already-prepared module loader.

@@ -160,13 +160,15 @@ void ReportMap(const char * const name, const int index)
                (peakNow > s_peakBeforeMap) ? "  <- NEW PEAK" : "");
 
     const auto atPeak = [](const MemTag tag) { return ps2::heap::GetWindowPeakTagBytes(tag); };
-    Com_Printf("MapCycle [%2d/%2d] %-9s load peak %-9s Tex %-9s Mdl %-9s Spr %-9s Audio %-9s ARENA %-9s\n",
+    char pack[kUnit];
+    Com_Printf("MapCycle [%2d/%2d] %-9s load peak %-9s Tex %-9s Mdl %-9s Spr %-9s Audio %-9s Pack %-9s ARENA %-9s\n",
                index + 1, ArrayLength(kMaps), name,
                FormatMemoryUnit(ps2::heap::GetWindowPeakMemBytes(), true, peak,   sizeof(peak)),
                FormatMemoryUnit(atPeak(MemTag::TexImage),           true, tex,    sizeof(tex)),
                FormatMemoryUnit(atPeak(MemTag::AliasMdl),           true, alias,  sizeof(alias)),
                FormatMemoryUnit(atPeak(MemTag::SpriteMdl),          true, sprite, sizeof(sprite)),
                FormatMemoryUnit(atPeak(MemTag::Audio),              true, audio,  sizeof(audio)),
+               FormatMemoryUnit(atPeak(MemTag::Pack),               true, pack,   sizeof(pack)),
                FormatMemoryUnit(ps2::heap::GetHeapStats().arenaBytes, true, arena, sizeof(arena)));
 }
 

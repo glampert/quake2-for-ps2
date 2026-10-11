@@ -55,6 +55,15 @@ paths:
   prepped), or after a timeout (150 s on this port, 120 s in id's code: a USB load can take
   longer). The PS2 loading screen hangs off those calls and off `FS_LoadFile`/`FS_FOpenFile`
   (`ps2/renderer/loading_screen.h`).
+- **filesys.c loads `pakN.pkz` in place of `pakN.pak`** when both exist, through
+  `ps2/fs/pkz_pack.h`. For a pkz, `pack_t.handle` is NULL and `packfile_t.filepos` is the
+  file's index in the pkz, not an offset. Its `FS_FOpenFile` streams start at position 0 for a
+  deflated file (an `fopencookie` stream), so loaders must take `ftell` at open and seek
+  relative to it, as the BSP and MD2 loaders do. Nothing may seek past a file's end, or read
+  past it expecting the next file's bytes.
+- The I/O log (`PS2_QUAKE_IO_LOG`, `ps2/debug/io_log.h`, ships 0) times every file call of a
+  load: hooks around `FS_FOpenFile`, `FS_Read`, `FS_LoadFile` and `FS_FCloseFile`. Raw
+  `fread` on a stream (the demo and cinematic readers) isn't seen.
 - The load trace (`PS2_LOAD_TRACE`, `ps2/debug/load_trace.h`) covers the path from
   `SCR_FinishCinematic` to the first `R_EndFrame` after registration. `PS2_QUAKE_LOAD_TRACE`
   ships as 0. To debug a load, pass `-DPS2_QUAKE_LOAD_TRACE=1` in `CONFIG_DEFS` (clear

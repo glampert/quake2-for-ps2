@@ -79,8 +79,9 @@ constexpr int kMaxRomModules = 8;
 static RomModule s_romModules[kMaxRomModules];
 static int       s_numRomModules = 0;
 
-// The file probed for under "<base>/baseq2/" to decide a base path works.
-constexpr const char * kProbeFile = "pak0.pak";
+// The files probed for under "<base>/baseq2/" to decide a base path works: the compressed pack
+// the game loads in preference (fs/pkz_pack.h), or id's.
+constexpr const char * kProbeFiles[] = { "pak0.pkz", "pak0.pak" };
 
 // PCSX2 builds have differed on whether "host:/" is ELF-relative or host-absolute,
 // so the explicitly relative form is tried too.
@@ -129,6 +130,23 @@ static const char * s_hddStatus = "not checked";
 constexpr int kUsbWaitTotalMsec = 10000;
 constexpr int kUsbWaitStepMsec  = 100;
 
+// fileXio serves a read in pieces the size of its IOP buffer, each one a device read and a DMA
+// to the EE, waited out before the next (fileXio_iop.c). Its default of 16 KB makes every PFS
+// read reach the drive as 16 KB transfers. 64 KB is the most usbmass_bd asks of a drive in one
+// SCSI command (128 sectors). FatFs also ends each read at a cluster's end, so on USB a larger
+// buffer only pays on a volume with clusters over 16 KB. Pass -DPS2_QUAKE_FILEXIO_BUFFER_KB=16
+// for the stock size, to compare.
+#ifndef PS2_QUAKE_FILEXIO_BUFFER_KB
+#define PS2_QUAKE_FILEXIO_BUFFER_KB 64
+#endif
+constexpr int kStockFileXioBufferBytes = 16 * 1024;
+constexpr int kFileXioBufferBytes      = PS2_QUAKE_FILEXIO_BUFFER_KB * 1024;
+static_assert(kFileXioBufferBytes >= kStockFileXioBufferBytes && kFileXioBufferBytes <= 256 * 1024,
+              "PS2_QUAKE_FILEXIO_BUFFER_KB must be 16 to 256");
+
+// See FileXioBufferBytes().
+static int s_fileXioBufferBytes = 0;
+
 bool CanOpen(const char * path)
 {
     std::FILE * file = std::fopen(path, "rb");
@@ -143,9 +161,16 @@ bool CanOpen(const char * path)
 // Probes exactly the path the Quake filesystem will build from the base ("<base>/baseq2/...").
 bool HasGameData(const char * basePath)
 {
-    char probePath[MAX_OSPATH];
-    std::snprintf(probePath, sizeof(probePath), "%s/baseq2/%s", basePath, kProbeFile);
-    return CanOpen(probePath);
+    for (const char * probeFile : kProbeFiles)
+    {
+        char probePath[MAX_OSPATH];
+        std::snprintf(probePath, sizeof(probePath), "%s/baseq2/%s", basePath, probeFile);
+        if (CanOpen(probePath))
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 // Retain the launch partition before the IOP reset discards the loader's PFS mount.
@@ -417,6 +442,33 @@ const char * FindHddGameData(const char * preferredPartition, const char * folde
     return nullptr;
 }
 
+// Gives fileXio its larger read buffer, once the drive's own modules have taken their IOP memory.
+void SetFileXioBuffer()
+{
+    s_fileXioBufferBytes = kStockFileXioBufferBytes;
+    if (kFileXioBufferBytes == kStockFileXioBufferBytes)
+    {
+        return;
+    }
+
+    const int result = fileXioSetRWBufferSize(kFileXioBufferBytes);
+    if (result == 0)
+    {
+        s_fileXioBufferBytes = kFileXioBufferBytes;
+        std::printf("IOP boot: fileXio read buffer %d KB.\n", kFileXioBufferBytes / 1024);
+        return;
+    }
+
+    // fileXio frees its old buffer before allocating the new one, and keeps a null one when that
+    // fails, which every read would then DMA from: put the stock size back.
+    std::printf("IOP boot: no IOP memory for a %d KB fileXio read buffer (%d); keeping %d KB.\n",
+                kFileXioBufferBytes / 1024, result, kStockFileXioBufferBytes / 1024);
+    if (fileXioSetRWBufferSize(kStockFileXioBufferBytes) != 0)
+    {
+        Sys_Error("IOP boot: fileXio has no read buffer left");
+    }
+}
+
 // Crude millisecond wait; fine for boot-time polling.
 void BusyWaitMsec(int msec)
 {
@@ -519,6 +571,7 @@ const char * DetectBasePathAndBootIop(const char * elfPath)
 
     if (const char * basePath = FindHddGameData(preferredPartition, s_elfFolder))
     {
+        SetFileXioBuffer();
         return basePath;
     }
 
@@ -542,6 +595,7 @@ const char * DetectBasePathAndBootIop(const char * elfPath)
         if (basePath != nullptr)
         {
             std::printf("IOP boot: game data on %s/baseq2 (USB, ready after ~%d ms).\n", basePath, waited);
+            SetFileXioBuffer();
             return basePath;
         }
         BusyWaitMsec(kUsbWaitStepMsec);
@@ -565,13 +619,13 @@ const char * DetectBasePathAndBootIop(const char * elfPath)
     Sys_Error("No game data found!\n"
               "Emulator: enable the host filesystem; baseq2/ goes by the ELF.\n"
               "HDD: baseq2/ goes by the ELF on an APA/PFS partition.\n"
-              "USB: put baseq2/ (%s etc) next to the ELF, or at the\n"
-              "root of a FAT32/exFAT drive.\n"
+              "USB: put baseq2/ (%s or %s etc) next to the ELF,\n"
+              "or at the root of a FAT32/exFAT drive.\n"
               "Launched as: %s\n"
               "Looked for: %s\n"
               "HDD: %s\n"
               "USB volumes mounted:%s",
-              kProbeFile, launchedAs, searched, s_hddStatus, (mountedVolumes[0] != '\0') ? mountedVolumes : " none");
+              kProbeFiles[1], kProbeFiles[0], launchedAs, searched, s_hddStatus, (mountedVolumes[0] != '\0') ? mountedVolumes : " none");
     return nullptr; // unreachable; Sys_Error halts
 }
 
@@ -585,6 +639,11 @@ int SyncGameDataDevice()
 bool UsbStackStarted()
 {
     return s_usbStackStarted;
+}
+
+int FileXioBufferBytes()
+{
+    return s_fileXioBufferBytes;
 }
 
 bool LoadRomModuleOnce(const char * path)

@@ -44,6 +44,18 @@ paths:
   the city3 -> strike load. All 39 maps still load, and the top chunk ended at 1.11 MB. An
   overflow no longer waits for the GS (see `performance.md`), so the halves can go back to
   512 KB if this headroom is ever needed: frames would overflow, cheaply, instead.
+- **A compressed pack** (`baseq2/pak0.pkz`, MapCycle 2026-10-11, debug, against
+  `mapcycle-chain768`):
+  - All 39 maps load.
+  - Every map's live total is +0.14 MB: tag `Pack`, 93 KB of directory tables (80 KB in
+    release, which keeps no CRCs) plus the 40 KB whole-file workspace.
+  - At a load peak `Pack` is 134 KB, or 206 KB with a deflated stream open (72 KB each, freed
+    at close).
+  - The worst moment rose from 30.08 to 30.26 MB (city3). The lowest sbrk headroom was 1.22 MB
+    against 1.12 (strike).
+  - The arena tracked the live increase, within ~0.07 MB apart from a transient bump. The
+    end-of-pass top chunk was 55 KB against 1.11 MB, but arena-free plus headroom differed
+    only by the 0.14 MB: where the free space lands is chaotic.
 - **Fixed segregated heaps for textures/models were rejected.** A partition must cover
   max(tex+mdl) + max(everything else), and those peak at different moments, so it costs about
   1.2 MB more than fragmentation does. Fragmentation (arena minus live peak) measured

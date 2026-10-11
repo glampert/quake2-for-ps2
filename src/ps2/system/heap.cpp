@@ -87,6 +87,7 @@ static const char * const s_memTagNames[kMemTagCount] = {
     "Audio",
     "Music",
     "SaveData",
+    "Pack",
 };
 
 static inline size_t MemTagToIndex(const MemTag tag)

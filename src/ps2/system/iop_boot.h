@@ -39,6 +39,11 @@ int SyncGameDataDevice();
 // separately: both HDD and USB boots already reset/patched the IOP.
 bool UsbStackStarted();
 
+// The IOP buffer fileXio serves every HDD/USB read through, in bytes, which caps how much one
+// device read asks for (see PS2_QUAKE_FILEXIO_BUFFER_KB in iop_boot.cpp). 0 on host: boots,
+// which read through the ROM's FILEIO instead.
+int FileXioBufferBytes();
+
 // Starts an IRX image embedded in the ELF by the Makefile's bin2c rule. Unlike the
 // boot-time module chain above this is best-effort: it returns false instead of
 // halting, leaving the caller to run without that driver (see input/keyboard.cpp

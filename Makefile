@@ -8,8 +8,9 @@
 #    make release     -> optimized   -> build/release/quake2.elf
 #    make run         -> build + launch in PCSX2  (VSCode: F5)
 #    make release run -> the same, with the release build
-#    make tools       -> build host tools (imgdump, unpak, bspinfo, musenc) into build/tools/
+#    make tools       -> build host tools (imgdump, unpak, bspinfo, musenc, pakzip) into build/tools/
 #    make music       -> encode baseq2/music/trackNN.wav into the trackNN.adp files the game streams
+#    make pkz         -> convert baseq2/pakN.pak into the compressed pakN.pkz the game prefers
 #    make clean       -> remove build artifacts (both configs)
 #    make clean_vu    -> remove only assembled VU microprograms
 #
@@ -90,6 +91,7 @@ PS2_CXX_SRC =                         \
 	ps2/save/save_device.cpp          \
 	ps2/save/memcard.cpp              \
 	ps2/save/mc_icon.cpp              \
+	ps2/fs/pkz_pack.cpp               \
 	ps2/renderer/gs.cpp               \
 	ps2/renderer/vram.cpp             \
 	ps2/renderer/texture.cpp          \
@@ -122,6 +124,7 @@ PS2_CXX_SRC =                         \
 	ps2/debug/profile.cpp             \
 	ps2/debug/log_file.cpp            \
 	ps2/debug/load_trace.cpp          \
+	ps2/debug/io_log.cpp              \
 	ps2/builtin/palette.cpp           \
 	ps2/builtin/conchars.cpp          \
 	ps2/builtin/conback.cpp           \
@@ -188,6 +191,7 @@ SIZE_OPT_CXX_SRC =                    \
 	ps2/save/save_device.cpp          \
 	ps2/save/memcard.cpp              \
 	ps2/save/mc_icon.cpp              \
+	ps2/fs/pkz_pack.cpp               \
 	ps2/tests/draw_cube.cpp           \
 	ps2/tests/cinematics.cpp          \
 	ps2/tests/map_cycle.cpp           \
@@ -199,7 +203,8 @@ SIZE_OPT_CXX_SRC =                    \
 	ps2/debug/exception_handler.cpp   \
 	ps2/debug/profile.cpp             \
 	ps2/debug/log_file.cpp            \
-	ps2/debug/load_trace.cpp
+	ps2/debug/load_trace.cpp          \
+	ps2/debug/io_log.cpp
 
 SIZE_OPT_OBJS = $(addprefix $(OUTPUT_DIR)/$(SRC_DIR)/, $(SIZE_OPT_CXX_SRC:.cpp=.o))
 
@@ -262,9 +267,19 @@ HOST_TOOLS_PATH = $(SRC_DIR)/tools/host
 SCRIPTS_PATH    = $(SRC_DIR)/tools/scripts
 TOOLS_CXX_BINS  = $(addprefix $(BUILD_DIR)/tools/, imgdump unpak bspinfo musenc)
 TOOLS_PY_BINS   = $(addprefix $(BUILD_DIR)/tools/, symbolize)
-TOOLS_BINS      = $(TOOLS_CXX_BINS) $(TOOLS_PY_BINS)
 HOST_CXX       ?= c++
 HOST_CXXFLAGS  ?= -std=gnu++20 -O2 -Wall
+HOST_CC        ?= cc
+HOST_CFLAGS    ?= -std=gnu11 -O2
+
+# Host tools that deflate (pakzip) link the miniz submodule, built for the host with a
+# configuration of its own: the host can afford the full-size compressor tables the game
+# trims (TDEFL_LESS_MEMORY), so its miniz_export.h is not the game's.
+TOOLS_MINIZ_BINS    = $(addprefix $(BUILD_DIR)/tools/, pakzip)
+HOST_MINIZ_CFG_PATH = $(HOST_TOOLS_PATH)/miniz_cfg
+HOST_MINIZ_OBJS     = $(addprefix $(BUILD_DIR)/tools/miniz/, $(MINIZ_SRC:.c=.o))
+
+TOOLS_BINS = $(TOOLS_CXX_BINS) $(TOOLS_MINIZ_BINS) $(TOOLS_PY_BINS)
 
 # IOP/IRX modules embedded into the ELF: HDD/PFS and BDM USB storage, booted
 # by ps2/system/iop_boot.cpp when the game data isn't on host:,
@@ -362,7 +377,7 @@ EE_LIBS += -lkernel -ldraw -lgraph -lpacket2 -ldma -lpad -lkbd -laudsrv -lpatche
 #  Rules
 # ----------------------------------------------------------------------------
 
-.PHONY: all release run tools music clean clean_vu compiledb
+.PHONY: all release run tools music pkz clean clean_vu compiledb
 
 all: $(GAME_ELF) tools
 
@@ -490,6 +505,18 @@ $(TOOLS_CXX_BINS): $(BUILD_DIR)/tools/%: $(HOST_TOOLS_PATH)/%.cpp
 # musenc shares the ADPCM decoder with the game, so it plays back exactly what it measured.
 $(BUILD_DIR)/tools/musenc: $(SRC_DIR)/ps2/audio/spu_adpcm.h
 
+# miniz for the host tools: C99, its warnings not ours to fix, as in the game build.
+$(HOST_MINIZ_OBJS): $(BUILD_DIR)/tools/miniz/%.o: $(MINIZ_PATH)/%.c $(HOST_MINIZ_CFG_PATH)/miniz_export.h
+	@mkdir -p $(dir $@)
+	$(HOST_CC) $(HOST_CFLAGS) -w -I$(MINIZ_PATH) -I$(HOST_MINIZ_CFG_PATH) -c $< -o $@
+
+$(TOOLS_MINIZ_BINS): $(BUILD_DIR)/tools/%: $(HOST_TOOLS_PATH)/%.cpp $(HOST_MINIZ_OBJS)
+	@mkdir -p $(dir $@)
+	$(HOST_CXX) $(HOST_CXXFLAGS) -isystem $(MINIZ_PATH) -isystem $(HOST_MINIZ_CFG_PATH) $< $(HOST_MINIZ_OBJS) -o $@
+
+# pakzip writes the pack layout the game reads, from the same header.
+$(BUILD_DIR)/tools/pakzip: $(SRC_DIR)/ps2/fs/pkz_format.h
+
 # The soundtrack for the CD audio module (ps2/audio/cd_audio.cpp): every trackNN.wav in
 # MUSIC_DIR, any case, is encoded to a lowercase trackNN.adp beside it, skipping the ones
 # already newer than both their .wav and the encoder. The .wav files are only the source;
@@ -506,6 +533,23 @@ music: $(BUILD_DIR)/tools/musenc
 		$(BUILD_DIR)/tools/musenc "$$wav" "$$adp" || exit 1; \
 	done; \
 	[ $$found = 1 ] || { echo "No trackNN.wav files in $(MUSIC_DIR)/"; exit 1; }
+
+# The compressed game packs (ps2/fs/pkz_format.h): every pakN.pak in PAK_DIR is converted to
+# the pakN.pkz beside it, skipping the ones already newer than both their .pak and the
+# converter. The game loads a pkz instead of the pak with the same number, so the .pak needn't
+# go onto the USB stick once its pkz exists.
+PAK_DIR ?= baseq2
+
+pkz: $(BUILD_DIR)/tools/pakzip
+	@found=0; \
+	for pak in $(PAK_DIR)/pak[0-9].pak; do \
+		[ -e "$$pak" ] || continue; \
+		found=1; \
+		pkz="$${pak%.pak}.pkz"; \
+		if [ "$$pkz" -nt "$$pak" ] && [ "$$pkz" -nt $(BUILD_DIR)/tools/pakzip ]; then continue; fi; \
+		$(BUILD_DIR)/tools/pakzip "$$pak" "$$pkz" || exit 1; \
+	done; \
+	[ $$found = 1 ] || { echo "No pakN.pak files in $(PAK_DIR)/"; exit 1; }
 
 # Script tools are published into build/tools/ under the same extensionless names
 # as the compiled ones, so everything in there is invoked the same way.

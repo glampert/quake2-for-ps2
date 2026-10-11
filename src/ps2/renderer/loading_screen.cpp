@@ -9,6 +9,7 @@
 #include "ps2/audio/sound_hold.h"
 #include "ps2/common.h"
 #include "ps2/renderer/loading_screen.h"
+#include "ps2/debug/io_log.h"
 #include "ps2/debug/load_trace.h"
 
 #include <cstdio>
@@ -63,6 +64,7 @@ void PS2_LoadingScreenBegin()
     s_fileCount   = 0;
     s_bytesRead   = 0;
     s_fileName[0] = '\0';
+    PS2_IO_LOG_LOAD_BEGIN();
     Draw();
 
     // The plaque's lifetime is this screen's, timeout included, so the sound output is held
@@ -81,6 +83,7 @@ void PS2_LoadingScreenEnd()
     }
     s_active = false;
     PS2_SoundSetLoadingHold(0);
+    PS2_IO_LOG_LOAD_END();
 }
 
 void PS2_LoadingScreenNoteFile(const char * fileName, const int lengthBytes)

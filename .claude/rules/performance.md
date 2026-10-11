@@ -66,6 +66,112 @@ paths:
   because it waits out a pending music read (`audio.md`). Server holds the time, one row
   before the slow Frame (see `frame_budget.py`). Only demo playback streams like this.
 
+## Compressed packs (`pakN.pkz`) and load time
+
+- **What a pkz changes** (PCSX2 `host:`, debug, I/O log, 2026-10-11, first 8 MapCycle loads):
+  - Bytes read per load fall to 55-65% (base1 16.4 → 10.7 MB, base2 8.4 → 4.6 MB). base1.bsp
+    was delivered at 1.44x its size, since the loaders reread lumps. It was read from the drive
+    at 0.53x, which is 1.3x its compressed size: restarts reread input.
+  - Inflating costs 0.6-1.3 s per load, about 10-13 MB/s of output on PCSX2's EE. Expect less
+    on a console, where EE work runs ~1.56x PCSX2's.
+  - Another 0.3-0.9 s per load goes to file calls outside reads and inflating: copying out of
+    the dictionary, opening stored streams and, in debug builds, CRC-checking every pkz read.
+    The split between them wasn't measured.
+  - In PCSX2 a pkz load is therefore *slower* (base1 4.2 → 6.1 s), because `host:` reads are
+    nearly free there.
+- **On a console it wins by ~40%** (release + I/O log, USB stick, PAL console, 2026-10-11;
+  `io_log.txt` from one boot each, the pkz renamed away for the pak run):
+
+  | Load | pak | pkz | File calls pak → pkz | Read from the drive |
+  | --- | --- | --- | --- | --- |
+  | base2 | 58.6 s | 36.5 s | 51.5 → 30.3 s | 18.40 → 12.26 MB |
+  | waste2 | 29.2 s | 17.2 s | 23.4 → 13.2 s | 9.35 → 5.22 MB |
+
+  - Inflating took 1.2 s of base2 (0.6 s of waste2), about 12 MB/s of deflated output: 3% of
+    the load. The rest of the file time is waiting for the drive.
+  - The stick is bandwidth-bound: one large read runs 460-580 KB/s from either pack (base2.bsp
+    from the pak, 2.83 MB in 4.9 s). Time follows bytes read.
+  - Small files got cheaper by more than their bytes: wall textures 19.4 → 8.5 ms each,
+    `.pcx` 62 → 20 ms, models 212 → 90 ms. The cause wasn't isolated. fileXio splits a read
+    into a destination that isn't 64-byte aligned into a head, a middle and a tail read
+    (`fileXio_iop.c`); the pkz inflates from an aligned input buffer, and the pak reads
+    straight into `Z_Malloc` memory.
+  - Sounds are now most of a pkz load: base2's 177 WAVs were 17.0 of its 28.4 s of reading.
+    Deflate leaves them at 87-90% (16-bit 22 kHz PCM), so most are stored. Deflating a sample
+    delta instead (16-bit: low and high byte planes) takes the 218 WAVs of base2 and waste2
+    from 90% to 71% of their size (11.42 → 8.07 MB, stored below a 10% saving), about 1.7 MB
+    less to read on base2. That needs an unfilter step in `PS2_PkzRead` and a format flag.
+  - Seeks barely reread: only the collision loader's BSP stream read more than its file's
+    compressed size (1.07 MB for 0.92 MB on base2).
+- **USB with 32 KB clusters, and HDD** (2026-10-12, same console, release + I/O log, 64 KB
+  fileXio buffer, one boot each; the stick reformatted from 8 to 32 KB clusters):
+
+  | Load, setup | pak | pkz |
+  | --- | --- | --- |
+  | base2, USB 8 KB clusters, 16 KB buffer (above) | 58.6 s | 36.5 s |
+  | base2, USB 32 KB clusters, 64 KB buffer | 40.4 s | 29.9 s |
+  | base2, HDD (PFS), 64 KB buffer | 15.8 s | 14.8 s |
+  | waste2, USB 8 KB clusters, 16 KB buffer (above) | 29.2 s | 17.2 s |
+  | waste2, USB 32 KB clusters, 64 KB buffer | 20.6 s | 14.2 s |
+  | waste2, HDD (PFS), 64 KB buffer | 7.9 s | 7.5 s |
+
+  - **USB:** large reads went from ~580 to 650-790 KB/s (base2.bsp from the pak: 4.9 → 3.7 s).
+    Fitting both setups' large reads to *time = commands × c + bytes / B* gives c ≈ 5 ms per
+    USB command and B ≈ 900 KB/s, so whole-cluster commands are already near USB 1.1's ceiling.
+    The pkz gained less (−18% against −31%): it reads 32 KB at a time from unaligned offsets,
+    which is usually two partial-cluster commands, and its bytes were already fewer. Small
+    files still cost ~4-5 ms of command overhead each, ~2.5 s over base2's 498 files.
+  - **HDD:** twice as fast as the best USB setup, and compression barely matters (−5%):
+    inflating (1.2 s on base2) costs about what the smaller reads save. Reads run at one of
+    two speeds, ~1.35 MB/s or 6-8 MB/s, with little in between. The same file read twice gets
+    the same speed (base2's sounds in loads 1 and 5 of the pak run). The fast ones follow a
+    read of the bytes just before them in the pack (the gunner sounds after the first one;
+    pkz `v_bas3` straight after `v_bas1`, `comp_hum3` after `comp_hum1`), which looks like the
+    drive's own read-ahead. The renderer's pass over a BSP right after the collision loader's
+    ran 6 MB/s against 1.6 (pak). ~1.35 MB/s from the platters is low for any hard drive.
+    The user's bay holds a SATA adapter with a Hitachi drive of about 390 GB; the adapter, or
+    the transfer mode ps2atad settles on with it, is the unexamined suspect.
+  - **What it suggests:** order a pack's data by when the game loads it (from MapCycle load
+    lists) rather than id's order, so a level's reads run forward through the pack. On HDD
+    more reads would come from the drive's read-ahead; on USB, small neighbours would share
+    commands and BDM's 4 KB read cache (`bd_cache.c`). Also cluster-aligned 32 KB reads in the
+    pkz reader (one whole-cluster command each), and the WAV delta filter (fewer bytes).
+- **Console A/B recipe.** Use a release build with the log on:
+  `rm -rf build/release/src && make release CONFIG_DEFS='-DPS2_QUAKE_DEBUG=0 -DPS2_QUAKE_ASSERTS=0 -DPS2_QUAKE_PROFILE=0 -DNDEBUG -DPS2_QUAKE_IO_LOG=1'`,
+  then the same `rm -rf` and a plain `make release` afterwards.
+  - Build one USB image with `make_usb_image.py` and one with `--uncompressed-paks`.
+  - Start each load from the menu (New Game) or by a level change. A `map` typed at the
+    console, or a load from a disconnected client, raises no loading plaque and isn't logged.
+  - The file is written only when a load ends. Check the in-game console (Select) for
+    `I/O log: load N (...) written to <path>`, or a warning with the open/write/close results.
+    A console with an HDD that holds the game data loads from it, so its log lands there.
+    Move the HDD copy aside to measure USB: don't skip the HDD drivers (`ps2-platform.md`).
+- **A stream's inflate step is capped at 2 KB of input** (`kStreamInflateStepBytes`).
+  - Uncapped, the demo stream refilled its whole 32 KB dictionary in one frame: a 4.2 ms
+    `Server` spike in PCSX2, against 1.25 ms with the pak. Capped, the worst was 1.5 ms, and
+    slow frames matched the pak's (104 vs 107 of 7679).
+  - tinfl's wrapping mode can't take a smaller *output* size: it derives the dictionary mask
+    from it and returns `TINFL_STATUS_BAD_PARAM`.
+- **Overlapping inflate with the reads** (a reader thread) would save at most the 3% inflate
+  takes on a console.
+- **What sizes a drive read** (the IOP side of every `read()` on `mass:`/`pfs:`):
+  - fileXio serves it in pieces of its IOP buffer, each an `iomanX_read` plus a DMA to the
+    EE, waited out before the next. Stock size 16 KB. Boot now sets 64 KB
+    (`PS2_QUAKE_FILEXIO_BUFFER_KB`, iop_boot.cpp), once the drive's modules are loaded. In
+    PCSX2 both HDD and USB boots then still start audsrv and the keyboard.
+  - PFS reads a whole run of contiguous zones in one transfer, up to the piece size
+    (`fileTransfer`, pfs_fio.c). So on HDD the buffer sets the ATA transfer size.
+  - FatFs (bdmfs_fatfs, R0.16) ends every direct read at a cluster's end (`f_read`'s "Clip at
+    cluster boundary"). usbmass_bd caps a SCSI command at 128 sectors (64 KB). So a USB read
+    is at most one cluster, whatever the buffer. The user's stick (FAT32, 15.8 GB) had
+    **8 KB clusters** (macOS's default at that size), so its reads were 8 KB commands in the
+    2026-10-11 A/B. On 2026-10-12 it was reformatted with 32 KB clusters
+    (`newfs_msdos -F 32 -c 64`; `diskutil` can't choose a cluster size) for the next A/B.
+  - BDM caches reads under 8 sectors (`bd_cache.c`, 32 × 4 KB), so FAT walks for seeks come
+    mostly from cache. FatFs has `FF_USE_FASTSEEK 0` and `FF_FS_TINY 1`.
+  - The pkz inflater reads its input in 32 KB pieces (`kReadInputBytes`,
+    `kStreamInputBytes`), so a deflated file never asks for more than 32 KB at a time.
+
 ## EE codegen facts
 
 - **Count memory ops, not instructions.** ALU is the cheap half of this machine. A version

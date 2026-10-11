@@ -20,7 +20,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "common/q_common.h"
 #include "ps2/debug/engine_profile.h" // [PS2_QUAKE]
+#include "ps2/debug/io_log.h"           // [PS2_QUAKE]
 #include "ps2/debug/load_trace.h"       // [PS2_QUAKE]
+#include "ps2/fs/pkz_pack.h"            // [PS2_QUAKE]
 #include "ps2/renderer/loading_screen.h" // [PS2_QUAKE]
 
 //===========================================================================
@@ -63,6 +65,11 @@ typedef struct pack_s
     // empty. See FS_FindInPack.
     unsigned short * hash;
     int hashMask;
+
+    // [PS2_QUAKE]: a compressed pakN.pkz (ps2/fs/pkz_pack.h) in place of a pakN.pak, or NULL.
+    // It reads its files itself: handle is NULL, and each packfile_t's filepos is the file's
+    // index in the pkz rather than an offset.
+    ps2_pkz_t * pkz;
 } pack_t;
 
 typedef struct filelink_s
@@ -164,9 +171,11 @@ on files returned by FS_FOpenFile...
 */
 void FS_FCloseFile(FILE * fp)
 {
+    PS2_IO_LOG_CALL_BEGIN();               // [PS2_QUAKE]: ps2/debug/io_log.h
     PS2Quake_ProfileBegin(PS2_PROF_FS_IO); // [PS2_QUAKE]: see FS_FOpenFile
     fclose(fp);
     PS2Quake_ProfileEnd(PS2_PROF_FS_IO);
+    PS2_IO_LOG_STREAM_CLOSE_END(fp);
 }
 
 // RAFAEL
@@ -416,17 +425,35 @@ static int FS_FindFile(const char * filename, FILE ** file, pack_t ** pak, packf
 
 #endif // NO_ADDONS
 
-static int FS_FOpenFileImpl(const char * filename, FILE ** file)
+// [PS2_QUAKE]: where a file came from, for the I/O log.
+static const char * FS_SourceName(const pack_t * pak)
+{
+    return pak ? (pak->pkz ? "pkz" : "pak") : "file";
+}
+
+static int FS_FOpenFileImpl(const char * filename, FILE ** file, const char ** source)
 {
     pack_t * pak;
     packfile_t * entry;
     const int len = FS_FindFile(filename, file, &pak, &entry);
 
     file_from_pak = 0;
+    *source = FS_SourceName(pak); // [PS2_QUAKE]
 
     if (pak)
     {
         file_from_pak = 1;
+
+        // [PS2_QUAKE]: a compressed pack opens the stream itself.
+        if (pak->pkz)
+        {
+            *file = PS2_PkzOpenStream(pak->pkz, entry->filepos, filename);
+            if (!*file)
+            {
+                Com_Error(ERR_FATAL, "Couldn't open %s in %s", filename, pak->filename);
+            }
+            return len;
+        }
 
         // open a new file on the pakfile
         *file = fopen(pak->filename, "rb");
@@ -452,13 +479,16 @@ static int FS_FOpenFileImpl(const char * filename, FILE ** file)
 int FS_FOpenFile(const char * filename, FILE ** file)
 {
     int len;
+    const char * source;
 #if PS2_QUAKE_LOAD_TRACE
     const int open_start_ms = Sys_Milliseconds();
 #endif
+    PS2_IO_LOG_CALL_BEGIN();
     PS2Quake_FrameLogNoteOpen(filename);
     PS2Quake_ProfileBegin(PS2_PROF_FS_IO);
-    len = FS_FOpenFileImpl(filename, file);
+    len = FS_FOpenFileImpl(filename, file, &source);
     PS2Quake_ProfileEnd(PS2_PROF_FS_IO);
+    PS2_IO_LOG_STREAM_OPEN_END(filename, *file, len, source);
 
     // [PS2_QUAKE]: the caller streams it from here, so the loading screen names it now.
     PS2_LOAD_TRACE("FS_FOpenFile %s: %d bytes, opened in %d ms", filename, len, Sys_Milliseconds() - open_start_ms);
@@ -548,9 +578,11 @@ static void FS_ReadImpl(void * buffer, int len, FILE * fp)
 
 void FS_Read(void * buffer, int len, FILE * fp)
 {
+    PS2_IO_LOG_CALL_BEGIN();               // [PS2_QUAKE]: ps2/debug/io_log.h
     PS2Quake_ProfileBegin(PS2_PROF_FS_IO); // [PS2_QUAKE]: see FS_FOpenFile
     FS_ReadImpl(buffer, len, fp);
     PS2Quake_ProfileEnd(PS2_PROF_FS_IO);
+    PS2_IO_LOG_STREAM_READ_END(fp, len);
 }
 
 /*
@@ -576,6 +608,7 @@ int FS_LoadFile(const char * path, void ** buffer)
     // through the pak's handle, which stays open (and unbuffered) for the life of the game: one
     // seek and one read, where FS_FOpenFile's reopen made it an open, a seek, a read per KB and
     // a close. A file on disk is read unbuffered for the same reason.
+    PS2_IO_LOG_CALL_BEGIN();
     PS2Quake_FrameLogNoteOpen(path);
     PS2Quake_ProfileBegin(PS2_PROF_FS_IO);
     len = FS_FindFile(path, &h, &pak, &entry);
@@ -609,7 +642,14 @@ int FS_LoadFile(const char * path, void ** buffer)
     *buffer = buf;
 
     PS2Quake_ProfileBegin(PS2_PROF_FS_IO);
-    if (pak)
+    if (pak && pak->pkz) // [PS2_QUAKE]: a compressed pack reads (and inflates) the file itself.
+    {
+        if (!PS2_PkzRead(pak->pkz, entry->filepos, buf))
+        {
+            Com_Error(ERR_FATAL, "FS_LoadFile: %s is damaged in %s", path, pak->filename);
+        }
+    }
+    else if (pak)
     {
         fseek(pak->handle, entry->filepos, SEEK_SET);
         FS_ReadImpl(buf, len, pak->handle);
@@ -621,9 +661,10 @@ int FS_LoadFile(const char * path, void ** buffer)
         fclose(h);
     }
     PS2Quake_ProfileEnd(PS2_PROF_FS_IO);
+    PS2_IO_LOG_LOAD_FILE_END(path, len, FS_SourceName(pak)); // [PS2_QUAKE]
 
     PS2_LOAD_TRACE("FS_LoadFile %s: %d KB from %s in %d ms", path, (len + 1023) / 1024,
-                   pak ? "pak" : "file", Sys_Milliseconds() - read_start_ms); // [PS2_QUAKE]
+                   FS_SourceName(pak), Sys_Milliseconds() - read_start_ms); // [PS2_QUAKE]
     return len;
 }
 
@@ -745,6 +786,51 @@ pack_t * FS_LoadPackFile(char * packfile)
 }
 
 /*
+=================
+FS_LoadPkzFile
+
+[PS2_QUAKE]: FS_LoadPackFile for a compressed pakN.pkz (ps2/fs/pkz_pack.h). The pack reads its
+own directory; this builds the packfile_t array and the hash from it, so lookups don't change.
+=================
+*/
+static void FS_AddPkzFile(void * context, int index, const char * name, int length)
+{
+    packfile_t * file = (packfile_t *)context + index;
+
+    strcpy(file->name, name); // shorter than MAX_QPATH: PS2_PkzOpen skipped longer names
+    file->filepos = index;
+    file->filelen = length;
+}
+
+static pack_t * FS_LoadPkzFile(const char * packfile)
+{
+    ps2_pkz_t * pkz;
+    pack_t * pack;
+    int numfiles;
+
+    pkz = PS2_PkzOpen(packfile);
+    if (!pkz)
+    {
+        return NULL;
+    }
+
+    numfiles = PS2_PkzNumFiles(pkz);
+
+    pack = Z_Malloc(sizeof(pack_t));
+    pack->files = Z_Malloc((numfiles > 0 ? numfiles : 1) * sizeof(packfile_t));
+    PS2_PkzListFiles(pkz, FS_AddPkzFile, pack->files);
+
+    strcpy(pack->filename, packfile);
+    pack->handle = NULL;
+    pack->pkz = pkz;
+    pack->numfiles = numfiles;
+    FS_HashPack(pack);
+
+    Com_Printf("Added packfile %s (%i files, compressed)\n", packfile, numfiles);
+    return pack;
+}
+
+/*
 ================
 FS_AddGameDirectory
 
@@ -774,9 +860,18 @@ void FS_AddGameDirectory(char * dir)
     //
     for (i = 0; i < 10; i++)
     {
-        Com_sprintf(pakfile, sizeof(pakfile), "%s/pak%i.pak", dir, i);
+        // [PS2_QUAKE]: a compressed pakN.pkz is loaded instead of pakN.pak when there is one.
+        // The two hold the same files, so loading both would only cost the memory of a second
+        // directory.
+        Com_sprintf(pakfile, sizeof(pakfile), "%s/pak%i.pkz", dir, i);
+        pak = FS_LoadPkzFile(pakfile);
 
-        pak = FS_LoadPackFile(pakfile);
+        if (!pak)
+        {
+            Com_sprintf(pakfile, sizeof(pakfile), "%s/pak%i.pak", dir, i);
+            pak = FS_LoadPackFile(pakfile);
+        }
+
         if (!pak)
         {
             continue;
@@ -855,7 +950,14 @@ void FS_SetGamedir(const char * dir)
     {
         if (fs_searchpaths->pack)
         {
-            fclose(fs_searchpaths->pack->handle);
+            if (fs_searchpaths->pack->pkz) // [PS2_QUAKE]
+            {
+                PS2_PkzClose(fs_searchpaths->pack->pkz);
+            }
+            else
+            {
+                fclose(fs_searchpaths->pack->handle);
+            }
             Z_Free(fs_searchpaths->pack->files);
             Z_Free(fs_searchpaths->pack->hash); // [PS2_QUAKE]
             Z_Free(fs_searchpaths->pack);

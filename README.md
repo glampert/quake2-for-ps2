@@ -49,6 +49,9 @@ at a small number of well defined seams — `refexport_t`, `SNDDMA_*`, `IN_*`, `
   structures changed, and every failure is explained in an on-screen message box.
 - **Memory.** A `dlmalloc`-backed program-wide heap with per-subsystem tag accounting, and a
   GS VRAM texture heap with LRU eviction and defragmentation.
+- **Compressed game data.** An optional zip pack, `pak0.pkz` (`make pkz`), that holds the same
+  files as `pak0.pak` in 92 MB instead of 175, so a level load reads about half the bytes off a
+  USB stick and takes 25-40% less time. It is inflated on the EE as it is read.
 - Runs on both the **PCSX2 emulator** and **real hardware**, loading game data from
   `host:` for development, an APA/PFS PS2 HDD, or USB mass storage, in that order, with PAL
   or NTSC video.
@@ -94,6 +97,7 @@ at a small number of well defined seams — `refexport_t`, `SNDDMA_*`, `IN_*`, `
    quake2-ps2/
      baseq2/
        pak0.pak
+       pak0.pkz      (optional, made by `make pkz` - see below)
        players/      (optional, loose files)
        video/        (optional, .cin cinematics)
        music/        (optional, trackNN.adp or trackNN.wav soundtrack - see below)
@@ -102,6 +106,12 @@ at a small number of well defined seams — `refexport_t`, `SNDDMA_*`, `IN_*`, `
 
    A loose-file tree works as well as the `.pak`; [src/tools/host/unpak.cpp](src/tools/host/unpak.cpp)
    builds a small extractor for that.
+
+   `make pkz` converts `pak0.pak` into `pak0.pkz`: a zip of the same files, most of them
+   deflated, in 92 MB instead of 175. The game loads a `pakN.pkz` in place of the `pakN.pak`
+   beside it, so a USB stick needs only the `.pkz`, and a level load reads about half the
+   bytes. [How to run](#how-to-run) says which pack suits which drive, and
+   [File system](#file-system) how it works.
 
    The soundtrack is optional too. Rip the CD's audio tracks 2-11 to 16-bit PCM WAVs named
    `baseq2/music/trackNN.wav` (NN = the CD track number; any case), then run `make music`
@@ -166,6 +176,7 @@ with `STRIP_ELF=0` to ship the unstripped ELF as `quake2.elf` instead.
 | `make run` | Builds, symlinks `build/<config>/baseq2` → `baseq2/`, and launches PCSX2 with the ELF. |
 | `make tools` | Builds the host-side command line tools into `build/tools/` (see below). |
 | `make music` | Encodes every `baseq2/music/trackNN.wav` into the `trackNN.adp` file beside it, skipping up-to-date ones. |
+| `make pkz` | Converts every `baseq2/pakN.pak` into the compressed `pakN.pkz` beside it, skipping up-to-date ones. |
 | `make compiledb` | Regenerates `compile_commands.json` from the Makefile, for IntelliSense/clangd. Run after adding or removing source files. |
 | `make clean` | Removes all build artifacts, both configs. |
 | `make clean_vu` | Removes only the assembled VU microprograms (`build/vu/`). |
@@ -192,6 +203,11 @@ and is simply copied into place):
   function names, files and line numbers. See [Reading a stack trace](#reading-a-stack-trace)
   below.
 - `build/tools/unpak` — extracts a Quake II `.pak` archive into a normal directory.
+- `build/tools/pakzip` — converts a `.pak` into a compressed `.pkz` pack
+  (`pakzip [--level N] [--block-kb N] [--min-saving P] in.pak out.pkz`). It reads its output
+  back and checks every file, and every restart point, against the pak before replacing
+  `out.pkz`. Built with the [miniz](src/tools/miniz) submodule; the format is in
+  [pkz_format.h](src/ps2/fs/pkz_format.h), which the game reads it with too.
 - `build/tools/musenc` — encodes a 16-bit PCM `.wav` into a streamed music file (`.adp`,
   SPU2 ADPCM), and `musenc -d` decodes one back to `.wav` for listening. It shares the
   decoder with the game ([spu_adpcm.h](src/ps2/audio/spu_adpcm.h)), so the SNR it reports is
@@ -202,12 +218,44 @@ and is simply copied into place):
   compiled into the ELF so the executable can boot and print errors before any game data
   is found.
 
-### Running in PCSX2
+## How to run
 
-`make run` handles the launch (`PCSX2 -batch -elf build/debug/quake2.elf`), but PCSX2 itself
-needs a couple of settings that are **off by default**. Edit
-`PCSX2.ini` **while PCSX2 is closed** — it rewrites the file on exit and will clobber your
-changes. On macOS it lives at `~/Library/Application Support/PCSX2/inis/PCSX2.ini`.
+The game looks for `baseq2/` in three places and uses the first one that has it: **the
+emulator's host filesystem, then a PS2 HDD, then a USB drive**. Each wants a different setup:
+
+| | Emulator (`host:`) | HDD | USB |
+| --- | --- | --- | --- |
+| What it reads | the repo's `baseq2/`, through PCSX2 | an APA/PFS partition on the drive in a fat PS2's expansion bay | a FAT32/exFAT drive on the PS2's USB 1.1 port |
+| Best pack | `pak0.pak` | either; `pak0.pkz` is smaller | `pak0.pkz` |
+| Best for | development and debugging | playing on a console | a console without an HDD |
+| A level load | a few seconds | about 15 s | about 30 s |
+
+**Which pack.** `make pkz` turns `pak0.pak` into `pak0.pkz`, the same files compressed into
+92 MB instead of 175 (see [File system](#file-system)). When both are in `baseq2/`, the game
+loads the `.pkz` and ignores the `.pak`, so a drive needs only one of them. The `.pkz` is
+inflated as it is read, which pays off in proportion to how slow the drive is. Loading base2,
+with release builds on one PAL console:
+
+| | `pak0.pak` | `pak0.pkz` |
+| --- | --- | --- |
+| HDD (a Hitachi drive on a SATA adapter) | 15.8 s | 14.8 s |
+| USB stick, FAT32 with 32 KB clusters | 40.4 s | 29.9 s |
+| USB stick, FAT32 with 8 KB clusters¹ | 58.6 s | 36.5 s |
+
+¹ With fileXio's stock 16 KB read buffer. The game now asks for 64 KB, which makes little
+difference on 8 KB clusters: the FAT driver never reads past a cluster in one go.
+
+In PCSX2 the `.pkz` is the slower one (a debug base1 load took 6.1 s against 4.2 s), since
+`host:` reads cost almost nothing and inflating doesn't. Leave it out of the repo's `baseq2/`
+for emulator work, or move it aside.
+
+### In PCSX2 (host filesystem)
+
+`make run` builds the debug ELF and launches it (`PCSX2 -batch -elf build/debug/quake2.elf`),
+or `make release run` the release one. PCSX2 itself needs a couple of settings that are
+**off by default**. Edit `PCSX2.ini` **while PCSX2 is closed** — it rewrites the file on exit
+and will clobber your changes. On macOS it lives at
+`~/Library/Application Support/PCSX2/inis/PCSX2.ini`.
 
 #### 1. Enable the host filesystem (`host:`)
 
@@ -258,7 +306,77 @@ worth knowing:
   and never sends `0x35` (grave). The port maps `0x34` to `` ` `` so the console toggle
   works under the emulator; on real hardware, hand it back with `in_keyboardmap 0x34 '`.
 
-#### 4. Testing HDD or USB storage in PCSX2
+### On a console
+
+Copy `quake2.elf` and `baseq2/` side by side into a folder on the HDD or the USB drive, then
+load the ELF with your launcher of choice (uLaunchELF, wLaunchELF, ...). A release zip's
+`q2ps2_<config>_<version>/` folder already has this layout, so it can be copied over as it is:
+
+```
+mass:/q2ps2_release_3.20/
+  quake2.elf
+  baseq2/
+```
+
+Play the release ELF; the debug one is slower and checks more. Storage, keyboard and sound
+drivers are all embedded in the ELF, so nothing else needs to be installed on the drive.
+
+At boot, `host:` fails instantly on a console. Boot then resets the IOP, applies the sbv
+patches and starts iomanX/fileXio, looks on the HDD and, if no HDD has the data, on USB.
+**A copy on the HDD wins even when the ELF was launched from USB**, so to run from USB on a
+console whose HDD also has the game, move the HDD copy out of its folder first. Once the
+drive is found, boot gives fileXio a 64 KB read buffer instead of its stock 16 KB (see
+[System and memory](#system-and-memory)).
+
+When no device has the data, the error screen shows the ELF path, the folders searched, the
+HDD status and the mounted USB volumes. `USB volumes mounted: none` means USB did not come up
+or the drive has no FAT partition.
+
+**Video mode.** By default the game runs in the console's own standard: 50 Hz on a PAL console,
+60 Hz on an NTSC one. Set `ps2_video_mode` to `ntsc` or `pal` (or pick "video mode" in the
+video options) to force one after a restart. A PAL console can drive NTSC if the TV accepts
+60 Hz; over composite a PAL-only set may lose the colour, while RGB SCART and component are
+fine. `ps2_fb_height` 0, the default, gives each standard its full height: 448 lines for NTSC,
+512 for PAL.
+
+#### From the HDD (fastest)
+
+This needs a fat PS2 with the network adapter and a drive in its expansion bay (IDE, or SATA
+through an adapter), formatted for the PS2 (APA, e.g. with uLaunchELF's HDD Manager). Make a
+PFS partition such as `+Q2PS2` and copy the folder into it. With every video and the
+soundtrack, the game takes about 290 MiB with only `pak0.pkz` and about 375 MiB with only
+`pak0.pak`, so a 512 MiB partition holds either. The HDD loads a level twice as fast as the
+best USB setup, and both packs load about as fast there: pick the `.pkz` to save the space.
+
+Boot loads the embedded DEV9/ATA/APA/PFS drivers. The partition and folder come from the ELF
+path the launcher passes (`argv[0]`), including `hdd0:+Q2PS2:pfs:/dir/quake2.elf` and
+`hdd0:/+Q2PS2/dir/quake2.elf`. The launch partition is checked first, its folder before its
+root. Other main PFS partitions are then searched, all matching folders before roots. This
+also handles a bare `pfsN:` launch path that no longer identifies its partition after the
+reset. The chosen partition stays mounted at `pfs0:` for all of the game's file I/O. A
+console without an HDD, or whose HDD drivers fail, goes on to USB.
+
+#### From USB
+
+Any USB drive works, but the PS2's ports are USB 1.1: at best about 0.9 MB/s, so a faster
+stick doesn't help. What does help is fewer bytes and fewer USB commands:
+
+- **Use `pak0.pkz`.** It reads about half the bytes, and loads 25-40% faster than the `.pak`.
+- **Format the drive as FAT32 with 32 KB clusters** (allocation units) **or larger.** The FAT
+  driver reads at most one cluster per USB command, and each command costs about 5 ms on top
+  of its transfer. macOS picks 8 KB clusters for a 16 GB stick, and its Disk Utility can't
+  change that; `sudo newfs_msdos -F 32 -c 64 -v NAME /dev/rdiskNsM` can (`-c 64` = 64 sectors,
+  32 KB; it erases the volume, so check the device with `diskutil list` first). On Windows,
+  pick the allocation unit size in the Format dialog. exFAT works too, if your launcher can
+  read it.
+
+Boot starts the embedded BDM/USB stack and waits up to 10 seconds for the drive. Every FAT
+volume is probed (`mass0:` to `mass9:`, one per partition, in mount order; two drives can be
+attached), the launch folder on all of them before their roots, so the data needn't be on
+the first partition or drive. The folder can be up to 50 characters long, which keeps the
+game's paths within their 128-byte limit. A `baseq2/` at a volume's root is the fallback.
+
+### Testing HDD or USB storage in PCSX2
 
 Set `HostFs = false` to exercise the console storage paths. The HDD settings are:
 
@@ -277,14 +395,18 @@ Msd_subtype = 0
 Msd_ImagePathMsd = /absolute/path/to/quake2-usb.img
 ```
 
+PCSX2 doesn't emulate either drive's speed, so load times there say nothing about a console.
+Boot prints the device it selected, including the APA partition name for HDD; as on a
+console, a matching HDD installation wins over USB, so disable the HDD to test USB.
+
 To prepare a new HDD and transfer a single-build USB package:
 
 1. In **PCSX2 → Settings → Network & HDD**, enable the HDD, choose a new `.raw` image,
    and click **Create Image**. Keep the USB image attached for the transfer.
 2. Boot uLaunchELF and open **FileBrowser → MISC → HddManager**. For the new, blank
    image, use **R1 → Format** to create the PS2's APA partition layout.
-3. Use **R1 → Create** to make a PFS partition named **`+Q2PS2`**. **512 MiB** is enough
-   for the ELF and `pak0.pak` package; use a larger partition for music, players and videos.
+3. Use **R1 → Create** to make a PFS partition named **`+Q2PS2`**. **512 MiB** holds the
+   whole game, music and videos included, with either pack.
 4. In FileBrowser, open **`mass:/`**, select **`quake2.elf`** and **`baseq2/`** with
    **Square**, then choose **R1 → Copy**.
 5. Navigate to **`hdd0:/+Q2PS2/`** and choose **R1 → Paste**. Open the copied
@@ -311,59 +433,17 @@ mass:/
 ```
 
 `baseq2/` copies the working directory, including the current `config.cfg`, players, saves
-and videos. Music includes only `.adp` tracks; `.wav` files are omitted. The decompressed
-`baseq2/pak0/` directory is omitted when `baseq2/pak0.pak` exists. Only the stripped ELFs are
-included, renamed by configuration and
-placed beside the data. For HDD, copy `quake2_debug.elf`, `quake2_release.elf` and `baseq2/`
-together into the PFS partition. Launch either ELF in uLaunchELF.
+and videos. Music includes only `.adp` tracks; `.wav` files are omitted. Of a `pakN.pak` and
+`pakN.pkz` pair only the `.pkz` is copied, since the game loads it in the pak's place;
+`--uncompressed-paks` copies the `.pak` instead, for comparing the two. The decompressed
+`baseq2/pak0/` directory is omitted when `baseq2/pak0.pak` or `pak0.pkz` exists. Only the
+stripped ELFs are included, renamed by configuration and placed beside the data. For HDD,
+copy `quake2_debug.elf`, `quake2_release.elf` and `baseq2/` together into the PFS partition.
+Launch either ELF in uLaunchELF.
 
 Use `--output /path/to/test.img` to choose another destination, `--size-mib 1024` to choose
 a fixed size, and `--force` to replace an existing image after a successful build. Close
 PCSX2 before replacing an attached image, then point USB2's `Msd_ImagePathMsd` at the output.
-
-Boot prints the selected device, including the APA partition name for HDD. A matching HDD
-installation wins over USB even when the ELF was launched from USB; disconnect or disable
-HDD to test USB specifically.
-
-### Running on real hardware
-
-Copy `quake2.elf` and `baseq2/` side by side into a folder on an APA/PFS HDD partition or
-a FAT32/exFAT USB drive, then load the ELF with your launcher of choice. A release zip's
-`q2ps2_<config>_<version>/` folder already has this layout, so it can be copied over as it is:
-
-```
-mass:/q2ps2_release_3.20/
-  quake2.elf
-  baseq2/
-```
-
-The boot order is **host filesystem → HDD → USB**. `host:` fails instantly on a console.
-After that probe, boot resets the IOP, applies the sbv patches and starts iomanX/fileXio.
-HDD uses the embedded DEV9/ATA/APA/PFS drivers. The partition and folder come from the ELF
-path the launcher passes (`argv[0]`), including `hdd0:+Q2PS2:pfs:/dir/quake2.elf` and
-`hdd0:/+Q2PS2/dir/quake2.elf`. The launch partition is checked first, its folder before
-its root. Other main PFS partitions are then searched, all matching folders before roots.
-This also handles a bare `pfsN:` launch path that no longer identifies its partition after
-the reset. The chosen partition remains mounted at `pfs0:` for all engine file I/O.
-
-If no HDD data is found, boot starts the embedded BDM/USB stack and waits up to 10 seconds
-for enumeration. Every FAT volume is probed (`mass0:` to `mass9:`, one per partition, in
-mount order), the launch folder on all volumes before their roots. Thus the data needn't
-be on the first partition or drive. The folder can be up to 50 characters long, keeping
-engine paths within the 128-byte limit. Root `baseq2/` is retained as a fallback on both
-devices. Missing HDD hardware or an unavailable HDD driver does not prevent USB boot.
-
-When no device has the data, the error screen shows the ELF path, search folders, HDD
-status and mounted USB volumes. `USB volumes mounted: none` means USB did not come up or
-has no FAT partition. Storage, keyboard and sound IRX modules are all embedded in the ELF,
-so no separate drivers need to be installed on the drive.
-
-**Video mode.** By default the game runs in the console's own standard: 50 Hz on a PAL console,
-60 Hz on an NTSC one. Set `ps2_video_mode` to `ntsc` or `pal` (or pick "video mode" in the
-video options) to force one after a restart. A PAL console can drive NTSC if the TV accepts
-60 Hz; over composite a PAL-only set may lose the colour, while RGB SCART and component are
-fine. `ps2_fb_height` 0, the default, gives each standard its full height: 448 lines for NTSC,
-512 for PAL.
 
 ---
 
@@ -403,7 +483,8 @@ src/
   client/ common/ game/ server/   id's original Quake II C code
   null/                           id's null driver stubs - none are built any more
   tools/
-    host/                         host-side C++ command line tools (imgdump, unpak, bspinfo, musenc)
+    host/                         host-side C++ command line tools (imgdump, unpak, bspinfo, musenc,
+                                  pakzip)
     scripts/                      Python helpers (symbolize, compile_commands.json generator,
                                   gen_save_tables - the save games' function/animation name tables)
                                   and make_github_release.sh
@@ -411,7 +492,7 @@ src/
     vclpp/                        VCL preprocessor for the VU microprograms (git submodule)
     vu-checker/                   check_vu_code.py, the openvcl/dvp-as output checks run by every
                                   VU build (git submodule)
-    miniz/                        deflate codec for the save games (git submodule)
+    miniz/                        deflate codec for the save games and the compressed packs (git submodule)
     vscode_extensions/            VCL/VU assembly syntax highlighting for VSCode
   ps2/                            the PS2 backend - all new C++ code
     system/                       main() entry point, Sys_* seam, IOP boot, dlmalloc heap
@@ -422,6 +503,7 @@ src/
     math/                         vector/matrix math for the renderer
     net/                          NET_* seam (loopback only)
     save/                         Sys_Save* seam: save working set, slot archives, memory card
+    fs/                           compressed game packs (pakN.pkz) for the engine's file system
     builtin/                      images baked into the ELF (font, palette, HUD tiles)
     debug/                        simple on-screen printing for fatal errors, stack trace, HW exception handling
     tests/                        standalone bring-up scenes and tests (test cube, cinematics,
@@ -665,12 +747,58 @@ keyboard is plugged in, so a keyboard is read every frame only while in use (a k
 read in flight: it would wait for that read on the IOP's one file server, which over USB on a
 console stalled a frame for ~300 ms.
 
+### File system
+
+id's file system ([filesys.c](src/common/filesys.c)) is kept: the search path, the `pakN.pak`
+archives, links, `FS_LoadFile` and `FS_FOpenFile`. Off a console's USB stick a level load is
+mostly reads, so the changes are all about reading less, less often:
+
+- A pak's directory is hashed (pak0 has 3307 files). A whole-file load reads through the pak's
+  handle, which stays open and unbuffered, in one read. A stream gets a stdio buffer sized to
+  its file, up to 64 KB, so a model is one read rather than one per KB.
+- **Compressed packs.** For each `pakN.pak`, the game first looks for a `pakN.pkz` and loads
+  it instead. A pkz is a standard zip ([pkz_format.h](src/ps2/fs/pkz_format.h)) made by
+  `pakzip` (`make pkz`), with the pak's names in the pak's order. Each file is deflated or,
+  if deflate saves less than 10%, stored: decoding costs the console time, and for most
+  sounds it would buy back fewer bytes than it costs. pak0 shrinks from 175 MB to 92 MB:
+  maps to 41%, wall textures 44%, images 17-28%, models 75%; sounds hardly compress (88%).
+  Boot also accepts a `baseq2/` holding only `pak0.pkz`.
+- [pkz_pack.cpp](src/ps2/fs/pkz_pack.cpp) inflates on the EE with miniz's `tinfl`, already
+  linked for the save games. A whole-file load inflates straight into the caller's buffer, fed
+  from a 32 KB input buffer. A stream (`FS_FOpenFile`) of a deflated file is an `fopencookie`
+  stream, so the loaders' `fread`, `fseek` and `ftell` work as they did. A stored file opens
+  as a plain stream on the pack, the same as a pak file.
+- **Seeking.** The `.bsp` and `.md2` loaders seek around inside their files, and a `.bsp` is
+  too big to inflate whole at a level change's memory peak. Deflate can only be decoded from
+  the start, so `pakzip` ends every 32 KB of output with a full flush, which forgets the
+  history, and records where each block starts in a zip extra field. A seek starts over at
+  the target's block and drops less than 32 KB, and a seek back within the last 32 KB is
+  served from the inflater's dictionary. The flushes cost 0.8% of the pack's size, and any
+  zip tool still reads it (`unzip -t baseq2/pak0.pkz`). A zip made by another tool loads too,
+  just without restart points: a backward seek inflates from the file's start again.
+- **Why the EE inflates, not the IOP.** The IOP is a 37 MHz R3000 with no data cache, already
+  running the USB, FAT, file server and sound drivers. Inflating there would likely run no
+  faster than USB delivers, and make the IOP the bottleneck. During a load the EE mostly sits
+  waiting on the IOP's file server anyway. On a console's USB stick, the I/O log (see
+  [Debugging tools](#debugging-tools-and-cvars)) measured base2 at 29.9 s from `pak0.pkz`
+  against 40.4 s from `pak0.pak` on a USB stick with 32 KB clusters (36.5 against 58.6 s
+  with 8 KB clusters), with 1.2 s of it spent inflating. From the HDD both take about 15 s:
+  there inflating costs about what the smaller reads save.
+- **Memory** (tag `Pack`): pak0.pkz's tables are 80 KB (93 KB in debug builds, which keep each
+  file's CRC to check what they read), and whole-file loads share a 40 KB workspace. A stream
+  of a deflated file holds up to 72 KB from its first read until it is closed: its 32 KB
+  dictionary, an input buffer and the inflater.
+
 ### System and memory
 
 [main.cpp](src/ps2/system/main.cpp) locates the game data (`host:` first, then HDD/PFS, then USB/BDM
 bring-up) *before* `Qcommon_Init`, because `FS_InitFilesystem` opens pak files during init
 while the pad driver loads its `rom0:` modules later — after the IOP reset, which is the
-required order.
+required order. Once the drive is found, boot raises fileXio's IOP read buffer from 16 KB to
+64 KB (`PS2_QUAKE_FILEXIO_BUFFER_KB` in [iop_boot.cpp](src/ps2/system/iop_boot.cpp)): fileXio
+asks the drive for one buffer's worth at a time, so on an HDD this sets the transfer size.
+On USB, FatFs also stops each read at the end of a cluster, so a stick formatted with small
+clusters gains little from it.
 
 Memory is a single program-wide `dlmalloc` heap ([heap.h](src/ps2/system/heap.h)) with
 `operator new`/`delete` and Quake's `Z_Malloc` routed through a tag-accounting layer (`ps2::heap::MemTag::*`).
@@ -754,6 +882,19 @@ the first 3D frame after it. The lines cover the server's spawn, the client's pr
 and refresh registration, and every file read with its size and read time. While a level comes
 up, a heartbeat a second shows the client's state. "+ms" is the time since the previous trace,
 so a step's duration is on the line that ends it.
+
+**I/O log:** pass `-DPS2_QUAKE_IO_LOG=1` in `CONFIG_DEFS` (it ships 0; clear
+`build/<config>/src` first, since make doesn't track flags) and every level load writes what it
+read to `baseq2/io_log.txt` (each boot starts it afresh): a line per file with its time in the file system,
+bytes delivered, bytes read from the drive, time waiting for the drive and time inflating, and a
+summary per load ([io_log.h](src/ps2/debug/io_log.h)). The lines are kept in RAM until the load
+ends and written with one open/write/close, so on a USB stick the log doesn't slow the load it
+measures, as the load trace's ~23 ms per line does. It is how a `.pak` load and a `.pkz` load
+compare on a console: build it as a release (debug builds also CRC-check every pkz read), and
+start the load from the menu or by a level change - a `map` typed at the console raises no
+loading plaque, and only loads under the plaque are logged. The in-game console shows
+`I/O log: recording load N` as a load starts and `I/O log: load N (maps/...) written to <path>`
+as it ends, or a warning naming what failed.
 
 **Loading screen:** while the loading plaque is up, the screen shows the plaque with a status
 bar naming the file being read, and the files, megabytes and seconds so far. It's redrawn at
@@ -920,6 +1061,10 @@ against a release ELF you get function names from the symbol table but no file o
 **Build and project**
 
 - Package a ready-to-run **`.iso`/ELF release** so it can be tried without a toolchain.
+- Faster loads: lay a pack's data out in the order levels load it, so reads run forward
+  through the pack (the HDD then serves more of them from its read-ahead, and small files on
+  USB share commands); deflate a sample delta instead of raw PCM for sounds (about 71% of
+  their size instead of 90%); read the `.pkz` in whole, cluster-aligned 32 KB pieces.
 - More real-hardware coverage. So far a PAL console has been tested booting from USB, under its
   own PAL and forced NTSC. HDD/PFS boot and the USB keyboard have only been exercised in PCSX2.
 
