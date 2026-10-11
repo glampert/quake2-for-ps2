@@ -1106,8 +1106,8 @@ constexpr int kMaxWarpPolyVerts = 64 + 2;
 // Gathers a turbulent surface. The warp animation itself - ref_gl's
 // EmitWaterPolys, where every vertex's texture coordinates are pushed around by
 // a sine of the *other* axis plus time, which is what makes the surface ripple
-// while the geometry stays put - happens on the VU, at the emit (see BatchWarp).
-// What is left here is the fan walk.
+// while the geometry stays put - happens on the VU, at each triangle's corners
+// (see BatchWarp). What is left here is the fan walk.
 //
 // These polygons are shaped differently from ordinary ones, so this cannot go
 // through GatherPolyTriangles: the loader's SubdivideSurface leaves each as a
@@ -1138,11 +1138,10 @@ void DrawAnimatedWaterPolys(const mod::ModelSurface & surf, const SurfaceDrawSta
         // parks in those two lanes ride along unread, and the colour the bake left
         // is already the one this pass draws.
         //
-        // VU1 cuts what straddles, which water routinely does with the camera
-        // inside it. It carries the raw texel coordinates through the cut and warps
-        // whatever survives, and that is not merely equivalent to warping first:
-        // the coordinates are linear in clip space, so a cut interpolates them
-        // exactly, and the ripple is evaluated at the vertex that is really there.
+        // The raw texels stay raw all the way to VU1, large as they are: the
+        // ripple's phase is a function of them, so the loader cannot rebase them
+        // the way it does a wall's (ps2_st_rebase). WarpCorners does it after the
+        // warp instead, per triangle, and warps the corners before any cut.
         const int numTriangles = poly->numVerts - 2;
         const mod::PolyVertex * const src = poly->vertexes;
 

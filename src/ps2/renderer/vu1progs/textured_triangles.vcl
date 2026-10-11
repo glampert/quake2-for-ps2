@@ -286,81 +286,33 @@
 
 #endmacro
 
-; Projects one clip-space vertex and writes its three output qwords: ST,
-; RGBAQ and XYZ2, at offST/offAD/offXyz from iOutPtr. The RGBAQ qword is an
-; A+D write of the packed colour, or PACKED RGBAQ of a computed one.
+; ref_gl's EmitWaterPolys on one vertex: its raw texel coordinates, pushed
+; around by a sine of the *other* axis plus time, then SURF_FLOWING's scroll
+; and the texel-to-image divide. Leaves the warped, normalized (s, t) in
+; fUV.xy - not yet divided by w, which is the caller's business.
 ;
-; The packed color is moved with raw copies only (lq/sq.x): FMAC ops
-; would flush denormal color bit patterns (e.g. 0x800000FF) to zero.
+; Run on a triangle's corners only, never on a vertex the clipper made - see
+; WarpCorners, its one caller.
 ;
-; vPos is read, never written - the clipper needs the clip-space position
-; to survive, so the projection lands in a scratch register instead.
-;
-; 'lbl' prefixes the three labels placed here, and has to be unique to each
-; invocation.
+; The constants load here, not at the top of the loop: read per warped vertex
+; they are live inside the warp only, so they cost the clipper no registers.
+; The sine is computed rather than looked up - a table wants VU memory there
+; is none of, and the VU is not the bottleneck this moves work off.
 ;
 ; C-like pseudo-code:
 ;
-;   void EmitVertex(vec4 pos, vec4 stq, vec4 col,
-;                   int offST, int offAD, int offXyz)
+;   vec2 WarpTexels(vec4 stq) // (rgba, s, t, q), s and t in texels
 ;   {
-;       // Perspective divide; the STQ words share the 1/w so the GS
-;       // gets (s/w, t/w, 1/w) for perspective-correct interpolation.
-;       // The color bits get scaled too - garbage, but the rotate
-;       // below moves it into the ST qword's ignored .w:
-;       float q    = 1.0f / pos.w;
-;       vec3  proj = pos.xyz * q;         // now NDC
-;       vec4  stqScaled = stq * q;        // (junk, s/w, t/w, 1/w)
-;
-;       // NDC to GS window coordinates, in 12.4 fixed point:
-;       proj = ftoi4(gsOffset.xyz + proj * gsScale.xyz);
-;
-;       vec4 st = stqScaled.yzwx;         // ST (.w junk)
-;       if (warped) // ref_gl's ripple, on the vertex that really exists
-;           st.xy = Warp(stq.yz) * q;
-;       st.z = q;                         // what PACKED RGBAQ latches Q from
-;
-;       out[offST]      = st;
-;       out[offXyz].xyz = proj;           // XYZ (.w ADC bit set by caller)
-;       if (colorMode == Computed)
-;           out[offAD]  = ftoi0(col);     // PACKED RGBAQ, one byte per word
-;       else
-;       {
-;           out[offAD].x = stq.x;         // native RGBAQ: packed color...
-;           out[offAD].y = q;             // ...with Q in the word above
-;           out[offAD].z = 0x01;          // A+D destination: RGBAQ register
-;       }
+;       vec2 raw   = stq.yz;
+;       vec2 phase = raw * turnsPerTexel + framePhase; // turns
+;       vec2 ripple = 4.0f * sin(2pi * phase);         // the degree 7 polynomial
+;       vec2 uv;
+;       uv.x = raw.x + ripple.y + batch.scroll;        // crossed: S takes T's sine
+;       uv.y = raw.y + ripple.x;
+;       return uv * batch.invTexSize;                  // (1/w, 1/h) of the image
 ;   }
-#macro EmitVertex: vPos, vStq, vCol, offST, offAD, offXyz, lbl
+#macro WarpTexels: vStq
 
-    div        q,          vf00[w], vPos[w]
-    mul.xyz    fProj,      vPos,    q
-    mulq       fStqScaled, vStq,    q
-    addq.y     fQ,         vf00,    q
-
-    ; NDC to GS window coordinates, in 12.4 fixed point:
-    mula.xyz  acc,   fGSOffset, vf00[w]
-    madd.xyz  fProj, fProj, fGSScale
-    ftoi4.xyz fProj, fProj
-
-    ; Rotate (junk, sq, tq, q) into ST order (sq, tq, q, junk):
-    mr32 fST, fStqScaled
-
-    ilw.w iWarp, kWindowSpill(vi00)
-    ibeq  iWarp, vi00, lbl##NoWarp
-
-    ; --- turbulent: ref_gl's EmitWaterPolys, on the vertex that really exists ---
-    ;
-    ; Here rather than in the transform, deliberately. A vertex the clipper cut has
-    ; no ripple of its own - it is interpolated with the raw texel coordinates its
-    ; endpoints carried, and warped afterwards - which is what the EE clipper did
-    ; for the same reason. Warping first and interpolating the result would ripple
-    ; a vertex that is not there.
-    ;
-    ; The constants load here too, not at the top of the loop: read once per warped
-    ; vertex they are live inside this branch only, so they cost the clipper no
-    ; registers. The sine is computed rather than looked up - a table wants VU
-    ; memory there is none of, and the VU is not the bottleneck this moves work off.
     lq fWarpFold, kWarpConsts + 0(vi00)
     lq fWarpPoly, kWarpConsts + 1(vi00)
     lq fBatch,    kBatchParams(iBase)
@@ -409,10 +361,68 @@
     add.x  fUV, fUV,  fBatch[z]
     mul.xy fUV, fUV,  fBatch
 
-    ; Perspective-correct, overwriting what the plain path rotated in above.
-    mulq.xy fST, fUV, q
+#endmacro
 
-    lbl##NoWarp:
+; Projects one clip-space vertex and writes its three output qwords: ST,
+; RGBAQ and XYZ2, at offST/offAD/offXyz from iOutPtr. The RGBAQ qword is an
+; A+D write of the packed colour, or PACKED RGBAQ of a computed one.
+;
+; A turbulent batch's coordinates arrive here finished - warped, normalized
+; and rebased by WarpCorners - so this never warps anything itself.
+;
+; The packed color is moved with raw copies only (lq/sq.x): FMAC ops
+; would flush denormal color bit patterns (e.g. 0x800000FF) to zero.
+;
+; vPos is read, never written - the clipper needs the clip-space position
+; to survive, so the projection lands in a scratch register instead.
+;
+; 'lbl' prefixes the two labels placed here, and has to be unique to each
+; invocation.
+;
+; C-like pseudo-code:
+;
+;   void EmitVertex(vec4 pos, vec4 stq, vec4 col,
+;                   int offST, int offAD, int offXyz)
+;   {
+;       // Perspective divide; the STQ words share the 1/w so the GS
+;       // gets (s/w, t/w, 1/w) for perspective-correct interpolation.
+;       // The color bits get scaled too - garbage, but the rotate
+;       // below moves it into the ST qword's ignored .w:
+;       float q    = 1.0f / pos.w;
+;       vec3  proj = pos.xyz * q;         // now NDC
+;       vec4  stqScaled = stq * q;        // (junk, s/w, t/w, 1/w)
+;
+;       // NDC to GS window coordinates, in 12.4 fixed point:
+;       proj = ftoi4(gsOffset.xyz + proj * gsScale.xyz);
+;
+;       vec4 st = stqScaled.yzwx;         // ST (.w junk)
+;       st.z = q;                         // what PACKED RGBAQ latches Q from
+;
+;       out[offST]      = st;
+;       out[offXyz].xyz = proj;           // XYZ (.w ADC bit set by caller)
+;       if (colorMode == Computed)
+;           out[offAD]  = ftoi0(col);     // PACKED RGBAQ, one byte per word
+;       else
+;       {
+;           out[offAD].x = stq.x;         // native RGBAQ: packed color...
+;           out[offAD].y = q;             // ...with Q in the word above
+;           out[offAD].z = 0x01;          // A+D destination: RGBAQ register
+;       }
+;   }
+#macro EmitVertex: vPos, vStq, vCol, offST, offAD, offXyz, lbl
+
+    div        q,          vf00[w], vPos[w]
+    mul.xyz    fProj,      vPos,    q
+    mulq       fStqScaled, vStq,    q
+    addq.y     fQ,         vf00,    q
+
+    ; NDC to GS window coordinates, in 12.4 fixed point:
+    mula.xyz  acc,   fGSOffset, vf00[w]
+    madd.xyz  fProj, fProj, fGSScale
+    ftoi4.xyz fProj, fProj
+
+    ; Rotate (junk, sq, tq, q) into ST order (sq, tq, q, junk):
+    mr32 fST, fStqScaled
 
     ; Word 2 of a PACKED ST write latches Q for an RGBAQ that follows it, which
     ; is where colour mode 1 gets its Q from - it cannot ride in from the vertex
@@ -441,6 +451,78 @@
     isw.z  iRegRGBAQ, offAD(iOutPtr)
 
     lbl##Done:
+
+#endmacro
+
+; Finishes a turbulent triangle's texture coordinates, in the clipper's
+; buffer at 'buf' where ClipSeedTriangle laid its corners: each corner's raw
+; texels go through WarpTexels, the triangle comes down by whole repeats, and
+; the result is written over the (s, t) lanes of the corner's (rgba, s, t, q)
+; qword, corner 0's wrap entry included. The packed colour and the unread .w
+; stay as the seed left them.
+;
+; Every turbulent triangle comes through here, cut or not, for two reasons.
+;
+; The ripple has to be taken at the corners, before any cut. The clipper then
+; interpolates finished coordinates, as GL's does, and the piece that survives
+; draws exactly as the whole triangle would have. A cut vertex warped on its
+; own samples the ripple where no neighbour does, while the neighbours draw
+; the straight line between their corners' ripples: on a 64-unit leaf's edges
+; that put the two 3.2 texels apart at the median and 8 at worst.
+;
+; And the coordinates have to be small. Water arrives in raw texels measured
+; from the texture's world origin, typically tens of repeats out, and a
+; console's GS loses precision on large S/T - the walls' stretching and
+; swimming, which the loader's ps2_st_rebase cured for them (see
+; mod::SetRebaseWallSt). The loader cannot do that here: the ripple's phase is
+; a function of the raw coordinate, with a period of 16pi texels that no whole
+; number of 64-texel repeats is a multiple of, so shifting the input would
+; move the ripple. Shifting the output by whole repeats moves nothing under
+; REPEAT wrapping, mip levels included, so it happens here, after the warp:
+; by corner 0's whole repeats, which lands that corner in (-1, 1) and the
+; other two within a leaf's extent of it. Per triangle rather than per
+; polygon, which is just as exact - every triangle draws on its own.
+;
+; Into memory rather than the corner registers: the seed stored them whole,
+; and a masked write after a branch to a register written whole before it is
+; the ordering openvcl gets wrong. The caller's branch also puts these stores
+; in a block after the seed's own.
+;
+; C-like pseudo-code ('corner' is the seed's (rgba, s, t, q) qword):
+;
+;   void WarpCorners(qword* buf)
+;   {
+;       vec2 uv0   = WarpTexels(stq[0]);
+;       vec2 shift = trunc(uv0);            // whole repeats; ftoi0 truncates
+;       corner(buf, 0).yz = corner(buf, 3).yz = uv0 - shift; // 3: the wrap
+;       corner(buf, 1).yz = WarpTexels(stq[1]) - shift;
+;       corner(buf, 2).yz = WarpTexels(stq[2]) - shift;
+;   }
+#macro WarpCorners: buf
+
+    ; (u, v) up one lane, into the qword's s and t, with two masked writes of
+    ; lanes that are both defined: a rotate would read fUV's .zw, which nothing
+    ; writes, and openvcl rejects that.
+    WarpTexels{ fStq0 }
+    add.y    fCutST, vf00, fUV[x]
+    add.z    fCutST, vf00, fUV[y]
+    ftoi0.yz fShiftI, fCutST
+    itof0.yz fShift,  fShiftI
+    sub.yz   fCutST,  fCutST, fShift
+    sq.yz    fCutST,  buf + 1(vi00)
+    sq.yz    fCutST,  buf + 10(vi00)
+
+    WarpTexels{ fStq1 }
+    add.y  fCutST, vf00,   fUV[x]
+    add.z  fCutST, vf00,   fUV[y]
+    sub.yz fCutST, fCutST, fShift
+    sq.yz  fCutST, buf + 4(vi00)
+
+    WarpTexels{ fStq2 }
+    add.y  fCutST, vf00,   fUV[x]
+    add.z  fCutST, vf00,   fUV[y]
+    sub.yz fCutST, fCutST, fShift
+    sq.yz  fCutST, buf + 7(vi00)
 
 #endmacro
 
@@ -495,7 +577,8 @@
 ;               if (BackFacing(p[0], p[1], p[2])) continue; // no emit at all
 ;           }
 ;
-;           if (clipFlagQueue.last3() == 0) // about 49 triangles in 50
+;           bool cut = clipFlagQueue.last3() != 0; // about 1 triangle in 50
+;           if (!cut && !warped)
 ;           {
 ;               for (i = 0..2) EmitVertex(p[i], stq[i], col[i], &out[3i]);
 ;               out[2].w = out[5].w = out[8].w = 0x7FFF; // ADC clear: draw
@@ -503,9 +586,16 @@
 ;           }
 ;           else
 ;           {
+;               // A turbulent triangle's coordinates are finished first -
+;               // warped at its corners and rebased - so the clipper, if it
+;               // cuts, interpolates finished values:
+;               Seed(cut ? bufA : bufB, p, stq, col);
+;               if (warped)
+;                   WarpCorners(cut ? bufA : bufB);
+;
 ;               // Sutherland-Hodgman against near and the four guard-band
 ;               // sides (vu_clip.i), then fan the survivors from corner 0:
-;               int n = ClipPolygon(p, stq, col); // 0, or 3 to 8 corners
+;               int n = cut ? ClipPolygon(bufA) : 3; // 0, or 3 to 8 corners in bufB
 ;               for (i = 1; i < n - 1; ++i)
 ;               {
 ;                   EmitVertex(corner 0, i and i + 1, &out[0..8]);
@@ -721,6 +811,12 @@
         ; in fifty does; the rest go straight out below.
         ibne  vi01, vi00, lClipTriangle
 
+        ; A turbulent batch's triangle goes out through the fan even when it
+        ; needs no cut, because its coordinates are finished in the clipper's
+        ; buffer: see WarpCorners. Water is a small share of any frame.
+        ilw.w iWarp, kWindowSpill(vi00)
+        ibne  iWarp, vi00, lWarpWhole
+
         ; --- every corner inside: emit the triangle as it stands ---
         EmitVertex{ fPos0, fStq0, fCol0, 0, 1, 2, lEmitUn0 }
         EmitVertex{ fPos1, fStq1, fCol1, 3, 4, 5, lEmitUn1 }
@@ -731,10 +827,30 @@
         iaddi  iVertsLeft, iVertsLeft, -3
         b lTriangleAdvance
 
+        ; --- turbulent, every corner inside: straight into B, where the fan reads ---
+    lWarpWhole:
+
+        ClipSeedTriangle{ iWalk, kClipBufB }
+
+        ; The seed's stores have to land before WarpCorners writes over their s
+        ; and t, and nothing here is a block boundary to keep them apart: openvcl
+        ; reorders stores, and it does not see 1(iWalk) and kClipBufB + 1(vi00)
+        ; as one address. On the cut path below, the warp flag's branch does it.
+        --barrier
+
+        WarpCorners{ kClipBufB }
+        b lFan
+
         ; --- a corner is outside: cut against near, fan what survives ---
     lClipTriangle:
 
-        ClipSeedTriangle{ iWalk }
+        ClipSeedTriangle{ iWalk, kClipBufA }
+
+        ; A turbulent batch's corners are finished before the cut. See WarpCorners.
+        ilw.w iWarp, kWindowSpill(vi00)
+        ibeq  iWarp, vi00, lSeedWarped
+        WarpCorners{ kClipBufA }
+        lSeedWarped:
 
         ; One plane for now. The other four guard-band sides are the same
         ; macro with a different selector, and go in next.
@@ -753,6 +869,8 @@
         ClipPlanePass{ fJpC[x], fJpN[x], kClipBufA, kClipBufB, lXr   }
         ClipPlanePass{ fJnC[y], fJnN[y], kClipBufB, kClipBufA, lYb   }
         ClipPlanePass{ fJpC[y], fJpN[y], kClipBufA, kClipBufB, lYt   }
+
+    lFan:
 
         ilw.x iCount, kClipCount(vi00)
 

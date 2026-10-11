@@ -58,10 +58,12 @@
 ; two share is written in both, which is why only this one moves.
 #define kClipCount 1009
 
-; Lays the three transformed corners into buffer A, first one repeated at
-; the end, and sets the corner count the first pass reads.
-#macro ClipSeedTriangle: iScratch
-    iaddiu iScratch, vi00, kClipBufA
+; Lays the three transformed corners into a buffer, first one repeated at
+; the end, and sets the corner count the first pass reads. 'buf' is A for a
+; triangle about to be cut; textured_triangles.vcl seeds B for a turbulent
+; one that needs no cut, which goes straight to the fan.
+#macro ClipSeedTriangle: iScratch, buf
+    iaddiu iScratch, vi00, buf
 
     sq fPos0, 0(iScratch)
     sq fStq0, 1(iScratch)

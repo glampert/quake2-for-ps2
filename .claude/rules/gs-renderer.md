@@ -91,8 +91,14 @@ The README's "Rendering" section is the architecture overview. The renderer file
   REPEAT this samples the same texels, mip levels included, and leaves base2's max at 15.
   Confirmed on hardware 2026-10-10, with the guard band at its usual 0.8. A first run had also
   narrowed the band to 0.25 through a test cvar, since removed. A second run without it showed
-  the walls were fixed by the shift alone. Anything new that sends large S/T (warped water still
-  does, in texels) is a candidate for the same artifacts.
+  the walls were fixed by the shift alone. Anything new that sends large S/T is a candidate for
+  the same artifacts.
+- **Water had the same problem, and the loader can't shift it.** It arrives in raw texels, and
+  the ripple's phase is a function of them, with a 16pi-texel period that no whole number of
+  64-texel repeats is a multiple of. On a console its texture wobbled as the camera turned,
+  most visibly on the triangles the camera stood in (2026-10-11). So VU1 shifts the *output*
+  by whole repeats, per triangle, after the warp (`WarpCorners` in textured_triangles.vcl).
+  Confirmed on hardware 2026-10-11: the wobble and the cut triangles' distortion were gone.
 
 ## CLUTs and palettized textures
 

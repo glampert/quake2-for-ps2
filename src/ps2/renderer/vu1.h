@@ -153,9 +153,9 @@ enum class BatchColorMode : u32
 
 // Batch header .y: whether the texture coordinates animate.
 //
-// Warped surfaces arrive in raw texel units and ref_gl's ripple is evaluated on the VU, at the
-// emit rather than the transform - so a vertex the clipper cut is interpolated raw and warped
-// afterwards, which is the vertex that actually exists. See the note in DrawAnimatedWaterPolys.
+// Warped surfaces arrive in raw texel units, and VU1 finishes them per triangle: ref_gl's ripple
+// at the corners, before any cut, then a shift by whole repeats that brings the coordinates near
+// zero for the GS. See WarpCorners in textured_triangles.vcl.
 enum class BatchWarp : u32
 {
     Off = 0,

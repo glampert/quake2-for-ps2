@@ -78,6 +78,19 @@ light block starts at 1010. The batch tag block is 7 qwords with no room to grow
 
 ## Writing VCL
 
+- **A cut must interpolate what the GS would have.** Anything per-vertex that is not linear
+  across the triangle (the water warp) has to be evaluated at the corners before the clipper
+  runs, so the cut lerps finished values, as GL's clipper does. Warping the vertex the cut
+  made samples the ripple where no neighbour does: on a 64-unit leaf's edges, computed, 3.2
+  texels off the neighbours at the median and 8 at worst. The water warp did that until
+  2026-10-11. Fixing it alone changed nothing visible on the console, where the large S/T
+  of water was the artifact the user saw (see [gs-renderer.md](gs-renderer.md)). Every
+  turbulent triangle now goes through `WarpCorners` in the clipper's buffer, cut or not, and
+  out through the fan. A new non-linear per-vertex term belongs there too.
+- **openvcl reorders stores within a block.** It moved a seed's store of corner 2 ahead of
+  corner 0's, and nothing says it sees `1(iWalk)` and `kClipBufB + 1(vi00)` as one address. A
+  store that must land after another to the same qword needs a block boundary or a
+  `--barrier` between them, as the uncut water path has between its seed and `WarpCorners`.
 - Above every non-trivial `#macro` and `#vuprog`, after the prose, add an indented
   `;`-commented **C-like pseudo-code** block: `vec4`/`mat4`/`qword` types, `//` comments, and
   control flow that mirrors the real code (`do/while` for a bottom-tested `ibne` loop).
