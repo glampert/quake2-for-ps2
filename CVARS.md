@@ -107,10 +107,10 @@ bigger picture.
 | `joy_pitchsensitivity` | `1` | `1` | | Right stick vertical (look) speed; negative inverts the axis. |
 | `joy_forwardsensitivity` | `1` | `1` | | Left stick vertical (move) speed; negative inverts the axis. |
 | `joy_sidesensitivity` | `1` | `1` | | Left stick horizontal (strafe) speed; negative inverts the axis. |
-| `joy_yawthreshold` | `0.15` | `0.15` | | Right stick horizontal dead zone, as a fraction of full deflection. |
-| `joy_pitchthreshold` | `0.15` | `0.15` | | Right stick vertical dead zone. |
-| `joy_forwardthreshold` | `0.15` | `0.15` | | Left stick vertical dead zone. |
-| `joy_sidethreshold` | `0.15` | `0.15` | | Left stick horizontal dead zone. |
+| `joy_yawthreshold` | `0.25` | `0.25` | Arch. | Right stick horizontal dead zone, as a fraction of full deflection. The travel past each dead zone is rescaled, so the response starts from zero at its edge. Raise it if a worn pad turns the camera with the stick released. |
+| `joy_pitchthreshold` | `0.25` | `0.25` | Arch. | Right stick vertical dead zone. |
+| `joy_forwardthreshold` | `0.25` | `0.25` | Arch. | Left stick vertical dead zone. |
+| `joy_sidethreshold` | `0.25` | `0.25` | Arch. | Left stick horizontal dead zone. |
 | `in_rumble` | `1` | `1` | Arch. | Gamepad force feedback (the Options menu's "gamepad rumble"). |
 | `in_rumbledebug` | `0` | `0` | | Print each rumble effect as it starts. |
 | `in_keyboard` | `1` | `0` | Arch. | Bring up the USB keyboard driver (one-shot; the IOP modules load once). A keyboard is polled every frame while in use (a key within 10 s, or one held), four times a second otherwise. |

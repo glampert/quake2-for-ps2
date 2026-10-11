@@ -126,6 +126,13 @@ paths:
   ps2sdk's own mcman.irx needs its own sio2man and won't link. Load ROM modules through
   `ps2::sys::LoadRomModuleOnce`, since SIO2MAN must not load twice. The same goes for any IRX:
   keyboard and audio bring-ups are one-shot.
+- **A camera that turns on its own is the stick, not a stale poll.** padman reports a poll with
+  no fresh data as `length` 0 (`padInit.c:353` in freepad, ps2sdk's padman, whose old-protocol
+  build mirrors rom0:PADMAN; the ROM module itself is closed), so `padRead` returns 0 and
+  `GamePad::Update` drops analog for that frame. A worn DualShock 2 can rest more than 0.15 of
+  full deflection off centre: the user's old pad turned the camera with the stick released on
+  a console (2026-10-11), which PCSX2 with a modern host pad never shows. The stick dead zones
+  went from 0.15 to 0.25 for it (input.cpp), which fixed that pad on the console.
 - **`mcInit` spins forever if MCSERV isn't running** (a SifBindRpc loop). Call it only after
   every module load succeeded.
 - libmc with the old MCSERV: no `mcRename`. "Unformatted" comes from `mcGetInfo`'s result

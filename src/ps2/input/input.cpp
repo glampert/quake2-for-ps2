@@ -4,7 +4,8 @@
  *        GamePad (see pad.h) and maps its state onto the engine: buttons become key
  *        events routed by input focus (menu/console navigation vs. rebindable game
  *        action keys), the right stick rotates the camera and the left stick moves
- *        the player - following the axis handling of the original win32/in_win.c.
+ *        the player - following the axis handling of the original win32/in_win.c,
+ *        with wider dead zones, past which the response ramps up from zero.
  *        The pad's vibration motors play the force feedback from rumble.cpp.
  *
  *        A USB keyboard (see keyboard.h) is optional and gated by the in_keyboard
@@ -32,6 +33,7 @@ extern "C" {
 }
 #pragma GCC diagnostic pop
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -112,8 +114,9 @@ static bool s_keyboardInitTried = false;
 // keyboard is switched off mid-press - otherwise a held +attack would stick.
 static bool s_keyboardHeld[256] = {};
 
-// Stick tuning (cvar names and defaults follow the original win32 joystick code;
-// negate a sensitivity to invert that axis).
+// Stick tuning (cvar names follow the original win32 joystick code; negate a sensitivity
+// to invert that axis). The thresholds are the dead zones, see ApplyDeadZone. They are
+// archived because how far off centre a stick rests differs from pad to pad.
 static const cvar_t * s_yawSensitivity;
 static const cvar_t * s_pitchSensitivity;
 static const cvar_t * s_forwardSensitivity;
@@ -147,6 +150,24 @@ void InstallDefaultBinds()
         std::snprintf(bind, sizeof(bind), "%s", mapping.gameBind);
         Key_SetBinding(mapping.gameKey, bind);
     }
+}
+
+// Zeroes a stick axis inside its dead zone and rescales the travel past it to [0, 1].
+// Worn DualShock 2 sticks can rest well off centre, sometimes past win32's 0.15, which
+// turns the camera with the stick released, so the dead zones are wider here. The
+// rescale is what makes that tolerable: win32 jumped from nothing to the threshold value
+// at the edge, so a wide dead zone would start every turn with a lurch and allow no slow
+// ones.
+float ApplyDeadZone(float axis, const cvar_t * threshold)
+{
+    const float deadZone = std::max(threshold->value, 0.0f);
+    const float magnitude = std::fabs(axis);
+    if (magnitude <= deadZone)
+    {
+        return 0.0f; // The axis is within [-1, 1], so a dead zone of 1 or more never divides.
+    }
+    const float scaled = (magnitude - deadZone) / (1.0f - deadZone);
+    return (axis < 0.0f) ? -scaled : scaled;
 }
 
 // Releases every key the keyboard still has down. Called when the keyboard is
@@ -206,10 +227,10 @@ void IN_Init()
     s_pitchSensitivity   = Cvar_Get("joy_pitchsensitivity",   "1",    0);
     s_forwardSensitivity = Cvar_Get("joy_forwardsensitivity", "1",    0);
     s_sideSensitivity    = Cvar_Get("joy_sidesensitivity",    "1",    0);
-    s_yawThreshold       = Cvar_Get("joy_yawthreshold",       "0.15", 0);
-    s_pitchThreshold     = Cvar_Get("joy_pitchthreshold",     "0.15", 0);
-    s_forwardThreshold   = Cvar_Get("joy_forwardthreshold",   "0.15", 0);
-    s_sideThreshold      = Cvar_Get("joy_sidethreshold",      "0.15", 0);
+    s_yawThreshold       = Cvar_Get("joy_yawthreshold",       "0.25", CVAR_ARCHIVE);
+    s_pitchThreshold     = Cvar_Get("joy_pitchthreshold",     "0.25", CVAR_ARCHIVE);
+    s_forwardThreshold   = Cvar_Get("joy_forwardthreshold",   "0.25", CVAR_ARCHIVE);
+    s_sideThreshold      = Cvar_Get("joy_sidethreshold",      "0.25", CVAR_ARCHIVE);
     s_inKeyboard         = Cvar_Get("in_keyboard",            PS2_QUAKE_DEBUG ? "1" : "0", CVAR_ARCHIVE);
 
     ps2::input::InitRumble(s_gamepad);
@@ -320,33 +341,21 @@ void IN_Move(usercmd_t * cmd)
 
     // Right stick rotates the camera. Stick right = turn right (yaw decreases),
     // stick up = look up (pitch decreases); flip a sensitivity cvar to invert.
-    const float yaw = s_gamepad.RightStickX();
-    if (std::fabs(yaw) > s_yawThreshold->value)
-    {
-        cl.viewangles[YAW] -= yaw * s_yawSensitivity->value * angleSpeed * cl_yawspeed->value;
-    }
+    const float yaw = ApplyDeadZone(s_gamepad.RightStickX(), s_yawThreshold);
+    cl.viewangles[YAW] -= yaw * s_yawSensitivity->value * angleSpeed * cl_yawspeed->value;
 
-    const float pitch = s_gamepad.RightStickY();
-    if (std::fabs(pitch) > s_pitchThreshold->value)
-    {
-        cl.viewangles[PITCH] += pitch * s_pitchSensitivity->value * angleSpeed * cl_pitchspeed->value;
-    }
+    const float pitch = ApplyDeadZone(s_gamepad.RightStickY(), s_pitchThreshold);
+    cl.viewangles[PITCH] += pitch * s_pitchSensitivity->value * angleSpeed * cl_pitchspeed->value;
 
     // Left stick moves the player. CL_FinishMove clamps the pitch and packs the
     // final angles/moves after IN_Move returns.
-    const float forward = s_gamepad.LeftStickY();
-    if (std::fabs(forward) > s_forwardThreshold->value)
-    {
-        cmd->forwardmove = static_cast<short>(static_cast<float>(cmd->forwardmove) -
-            (forward * s_forwardSensitivity->value * speed * cl_forwardspeed->value));
-    }
+    const float forward = ApplyDeadZone(s_gamepad.LeftStickY(), s_forwardThreshold);
+    cmd->forwardmove = static_cast<short>(static_cast<float>(cmd->forwardmove) -
+        (forward * s_forwardSensitivity->value * speed * cl_forwardspeed->value));
 
-    const float side = s_gamepad.LeftStickX();
-    if (std::fabs(side) > s_sideThreshold->value)
-    {
-        cmd->sidemove = static_cast<short>(static_cast<float>(cmd->sidemove) +
-            (side * s_sideSensitivity->value * speed * cl_sidespeed->value));
-    }
+    const float side = ApplyDeadZone(s_gamepad.LeftStickX(), s_sideThreshold);
+    cmd->sidemove = static_cast<short>(static_cast<float>(cmd->sidemove) +
+        (side * s_sideSensitivity->value * speed * cl_sidespeed->value));
 }
 
 // ------------------------------------------------------------------------------------------------

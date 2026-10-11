@@ -597,7 +597,11 @@ request analog mode → map the vibration motors → ready) and per-frame pollin
 button mask and sticks normalised to [-1, +1], and runs the two motors. [input.cpp](src/ps2/input/input.cpp) maps that onto the engine: the
 right stick rotates the camera and the left stick moves the player, with the same
 sensitivity/threshold cvars (`joy_yawsensitivity` and friends) the original win32 joystick
-code used — negate a sensitivity to invert that axis.
+code used — negate a sensitivity to invert that axis. The thresholds are per-axis dead zones
+of 0.25 of full deflection, not win32's 0.15: a worn DualShock 2 can rest further off centre
+than that, which turned the camera with the stick released. They are archived, so a value
+tuned to one pad persists. The travel past a dead zone is rescaled to the full range, so the
+response ramps up from zero at its edge instead of jumping to the threshold value.
 
 Buttons send **one of two keys depending on where input focus is**, so menus and the console
 stay navigable without stealing gameplay binds. The gameplay keys are ordinary rebindable

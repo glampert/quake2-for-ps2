@@ -244,7 +244,11 @@ draws), or `ps2_skip_entities 1` to drop every entity model from the draw.
 - **Client-side sources** (e.g. input/rumble.cpp) compile against the *real* `client/client.h`
   chain on host clang in C++ mode. Make the fake `ps2/common.h` wrap
   `#include "common/q_common.h"` in `extern "C"`, define the globals the source touches, and
-  fake only the hardware class.
+  fake only the hardware class. input.cpp's `IN_Move` (the stick dead zones) works this way
+  with fake `ps2/input/pad.h` (settable stick floats plus libpad's `PAD_*` bits), `keyboard.h`,
+  `rumble.h` and `ps2/renderer/profile.h`, and a `Cvar_Get` that merges flags like id's. Set
+  the anonymous-namespace `s_gamepad` directly. Its 10,428 checks caught HEAD's 0.15 step
+  response, rest drift from 20 counts up, and 5 of 5 seeded mutants (2026-10-11).
 - **Emulate the EE FPU** in any math harness: `1/sqrt(0)` must give FLT_MAX, not inf (see
   [ps2-platform.md](ps2-platform.md)). Otherwise target-only bugs won't reproduce.
 - **ASan can't see an overrun that stays inside one object** (a member array reading into
