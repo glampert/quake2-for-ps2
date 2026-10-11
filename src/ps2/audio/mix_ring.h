@@ -13,8 +13,10 @@
  *        position - it is monotonic by construction. GetSoundtime() requires exactly
  *        that (it infers buffer wraps from the value decreasing), and it means a stall
  *        long enough to drain the queue, such as a level load, recovers on its own with
- *        no resync logic. The cost is latency: s_mixahead plus the queue depth, which
- *        is the same deal the waveOut path shipped with.
+ *        no resync logic. What such a stall sounds like is another matter: audsrv loops
+ *        its ring through it, which is what sound_hold.h is for. The cost is latency:
+ *        s_mixahead plus the queue depth, which is the same deal the waveOut path shipped
+ *        with.
  *
  * This source code is released under the GNU GPL v2 license.
  * ================================================================================================ */

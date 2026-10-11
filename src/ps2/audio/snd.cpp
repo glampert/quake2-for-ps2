@@ -16,6 +16,7 @@
 
 #include "ps2/audio/audsrv_device.h"
 #include "ps2/audio/mix_ring.h"
+#include "ps2/audio/sound_hold.h"
 #include "ps2/common.h"
 #include "ps2/renderer/profile.h"
 
@@ -36,6 +37,29 @@ static ps2::audio::AudsrvDevice s_device;
 static ps2::audio::MixRing s_mixRing;
 
 static const cvar_t * s_disableSound = nullptr;
+
+// What holds the output silent (sound_hold.h): PS2_SoundHoldBegin/End's count, and the
+// loading plaque. Either one is enough.
+static int  s_soundHolds  = 0;
+static bool s_loadingHold = false;
+
+bool OutputHeld()
+{
+    return (s_soundHolds > 0) || s_loadingHold;
+}
+
+// Brings the device in line with the holds, after one of them changed.
+void ApplySoundHold()
+{
+    if (OutputHeld())
+    {
+        s_device.Hold();
+    }
+    else
+    {
+        s_device.Release();
+    }
+}
 
 // Output rate in Hz for a given s_khz. Only rates audsrv can take at 16-bit stereo
 // are offered - its upsampler table is a fixed list, and a rate outside it would fail
@@ -98,6 +122,12 @@ qboolean SNDDMA_Init()
     dma.speed            = sampleRateHz;
     dma.buffer           = s_mixRing.Buffer();
 
+    // A restart under a hold (snd_restart while the plaque is up) opens a playing stream.
+    if (OutputHeld())
+    {
+        s_device.Hold();
+    }
+
     return true;
 }
 
@@ -129,8 +159,46 @@ void SNDDMA_Submit()
     // covered here - what this measures is the hand-off, not the mix.
     PS2_PROFILE_SCOPED_EVENT(ps2::prof_evt::Sound);
 
+    // Held, nothing goes over: the submit cursor, which is the play position the mixer
+    // reads back, stands still, so the mixer stops a mixahead ahead of it and the music
+    // stops filling its ring. Both carry on from there after the release.
+    if (OutputHeld())
+    {
+        return;
+    }
+
     // NOTE: `paintedtime` is a global defined by client/snd_dma.c
     s_mixRing.Drain(s_device, paintedtime);
+}
+
+void PS2_SoundHoldBegin()
+{
+    ++s_soundHolds;
+    ApplySoundHold();
+}
+
+void PS2_SoundHoldEnd()
+{
+    PS2_AssertMsg(s_soundHolds > 0, "PS2_SoundHoldEnd without a PS2_SoundHoldBegin!");
+    if (s_soundHolds > 0)
+    {
+        --s_soundHolds;
+    }
+    ApplySoundHold();
+}
+
+void PS2_SoundSilence()
+{
+    if (!OutputHeld())
+    {
+        s_device.Silence();
+    }
+}
+
+void PS2_SoundSetLoadingHold(const int held)
+{
+    s_loadingHold = (held != 0);
+    ApplySoundHold();
 }
 
 } // extern "C"

@@ -563,6 +563,16 @@ in the build unchanged. The backend ([ps2/audio/](src/ps2/audio/)) only implemen
   playback rate and is monotonic by construction, which is what `GetSoundtime()` needs, and
   it means a stall long enough to drain the queue (a level load) recovers on its own with no
   resync logic.
+- [sound_hold.h](src/ps2/audio/sound_hold.h) keeps those stalls silent. audsrv's IOP thread
+  plays its ~106 ms ring whether or not anything new has arrived, so a frame blocked on the
+  memory card, or a level load off USB, used to loop the ring's last tenth of a second until
+  it came back: the soundtrack's stutter on saves, config writes and level changes. A hold
+  plays out what is queued, rewrites the ring with silence and stops audsrv. While it lasts
+  nothing is submitted, so the mixer and the music wait exactly where they were, and pick up
+  from that sample after the release. Memory card work (saving, loading, listing the slots,
+  config.cfg) is held, and so is the loading plaque from the moment it goes up, so a level's
+  music starts as the plaque comes down. A level change brings the plaque up before it
+  writes the level it leaves.
 
 Audio bring-up failure is not fatal: a missing IOP driver just costs sound. `ps2_disable_sound 1`
 turns it off deliberately.

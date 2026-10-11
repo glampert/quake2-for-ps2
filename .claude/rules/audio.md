@@ -42,6 +42,25 @@ measurements behind CD music (`cd_audio.cpp`, `music_stream.*`, `spu_adpcm.h`,
   main thread the same way. PCSX2's `host:` reads are too quick to show it. In PCSX2 a
   per-frame poll cost ~86 µs; with the idle polling the Input column averages 27 µs, against
   20 µs for the pad alone.
+- **audsrv loops its ring through an underrun.** Its IOP play thread advances the read cursor
+  whether or not anything was written (audsrv.c's `play_thread`), so a main loop that stops
+  submitting for longer than the ring (10 feed blocks: 9400 bytes, ~106 ms at 22050 Hz) gets
+  the last 106 ms played over and over. That was the stutter on saves, config writes and
+  level changes from USB; the user heard it as the music stuttering. Pausing the music alone
+  can't fix it. `AudsrvDevice::Hold` plays the queue out with silence until a whole ring has
+  been rewritten, then `audsrv_stop_audio()` (which renders zeros and freezes the read cursor).
+  Stopped, the ring is full, and only `audsrv_play_audio` restarts it, so `Release` calls
+  `audsrv_set_format` again to reset the cursors with half the ring free. While held,
+  `SNDDMA_Submit` sends nothing. The submit cursor is the mixer's play position, so the mixer
+  stops a mixahead ahead and the music ring stops filling, and both resume on the same sample.
+  Holds: the memory card calls in `save_api.cpp`, `SV_Savegame_f` from the level-file
+  compression on (card saves), and the plaque's lifetime (`PS2_LoadingScreenBegin/End`,
+  timeout included). `SCR_BeginLoadingPlaque` also silences the output at once, for loads that
+  skip the plaque (the console down, a new game between servers). It runs several times per load,
+  so the device tracks whether only silence went in since its last flush and then stops
+  without one. Verified in PCSX2 (`ps2_testsaves 2`, with temporary prints): every flush took
+  54-106 ms, audio came back after every release, and each load paid one flush. On a
+  console with USB data the user found it much better (2026-10-11).
 - **WAV fallback (the user's request, for whoever skips `make music`):** per search directory,
   `trackNN.adp`, then `trackNN.wav`, then `Track%02d.wav` (as `make music` accepts; FAT and
   macOS hosts ignore case anyway). The format comes from the header (`"Q2MU"` or RIFF/WAVE),

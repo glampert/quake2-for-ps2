@@ -22,6 +22,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include <ctype.h> // [PS2_QUAKE]: isalnum, SV_SaveNameIsValid
 
+#include "ps2/audio/sound_hold.h" // [PS2_QUAKE]
+
 /*
 ===============================================================================
 
@@ -527,6 +529,12 @@ void SV_GameMap_f(void)
 
     Com_DPrintf("SV_GameMap(%s)\n", Cmd_Argv(1));
 
+    // [PS2_QUAKE]: The plaque first, as SV_Map would put it up a little later: it stops the
+    // music and the sounds and holds the output silent, and the level file written below
+    // already blocks the frame - long enough on a console to set audsrv looping its last tenth
+    // of a second of music (ps2/audio/sound_hold.h). The loading screen shows for it too.
+    SCR_BeginLoadingPlaque();
+
     // check for clearing the current savegame
     map = Cmd_Argv(1);
     if (map[0] == '*')
@@ -669,6 +677,7 @@ void SV_Savegame_f(void)
 {
     const char * dir;
     qboolean ok;
+    qboolean toCard; // [PS2_QUAKE]
 
     if (sv.state != ss_game)
     {
@@ -710,9 +719,15 @@ void SV_Savegame_f(void)
     Com_Printf("Saving game...\n");
 
     // [PS2_QUAKE]: Writing to a memory card takes a moment and must not be interrupted.
-    // The frame is blocked meanwhile, so put the warning up before starting.
-    if (Sys_SaveTargetIsCard())
+    // The frame is blocked meanwhile, so put the warning up before starting - and hold the
+    // sound silent, from the level file's compression on: audsrv would loop its last tenth
+    // of a second until the frame came back (ps2/audio/sound_hold.h).
+    toCard = Sys_SaveTargetIsCard();
+    if (toCard)
+    {
         SCR_SetBusyNotice("Saving...\n\nDo not remove the memory card\nor switch off the console.");
+        PS2_SoundHoldBegin();
+    }
 
     // archive current level, including all client edicts.
     // when the level is reloaded, they will be shells awaiting
@@ -725,6 +740,8 @@ void SV_Savegame_f(void)
     // copy it off
     ok = ok && SV_CopySaveGame("current", dir);
 
+    if (toCard) // [PS2_QUAKE]
+        PS2_SoundHoldEnd();
     SCR_SetBusyNotice(NULL);
 
     // [PS2_QUAKE]: Say so when it didn't work, rather than printing "Done." regardless.

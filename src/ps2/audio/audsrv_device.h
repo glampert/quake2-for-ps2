@@ -48,12 +48,38 @@ public:
     // by audsrv, so the caller must resume from there rather than assume it all went.
     int Enqueue(const u8 * data, int sizeBytes);
 
+    // Silences the output ahead of a stretch in which nothing will be enqueued (see
+    // sound_hold.h): plays out what is queued, rewrites the whole ring with silence and
+    // stops audsrv, which otherwise keeps looping the ring through an underrun. Blocks for
+    // about the ring's length, ~106 ms. Does nothing if already held.
+    void Hold();
+
+    // Ends a Hold. Stopped, audsrv's read cursor stands still in a full ring, and only an
+    // enqueue restarts it - into room there isn't. So this puts the cursors back where
+    // Init left them, with half the ring free and nothing in it but the hold's silence.
+    // Does nothing unless held.
+    void Release();
+
+    // Hold and Release in one: the output goes silent now and stays stopped, with nothing
+    // stale left to replay, until the next Enqueue starts it again. For a stretch that may
+    // or may not come back through a hold (see PS2_SoundSilence).
+    void Silence();
+
+    bool Held() const { return m_held; }
+
 private:
     // libsd.irx -> audsrv.irx -> audsrv_init(). One-shot: re-running any of it would
     // fail the module load and leak the EE-side RPC thread audsrv_init() spawns.
     static bool StartIopSide();
 
-    bool m_ready = false;
+    // audsrv_set_format for the stream Init opened, which also resets audsrv's ring.
+    bool SetFormat();
+
+    bool m_ready        = false;
+    bool m_held         = false;
+    bool m_silent       = false; // Nothing but silence in the ring: a Hold's, and no Enqueue since.
+    int  m_sampleRateHz = 0;
+    int  m_ringBytes    = 0; // audsrv's IOP ring at m_sampleRateHz; see Init.
 };
 
 } // namespace ps2::audio

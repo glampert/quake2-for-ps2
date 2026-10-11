@@ -6,6 +6,7 @@
  * This source code is released under the GNU GPL v2 license.
  * ================================================================================================ */
 
+#include "ps2/audio/sound_hold.h"
 #include "ps2/common.h"
 #include "ps2/renderer/loading_screen.h"
 #include "ps2/debug/load_trace.h"
@@ -63,6 +64,12 @@ void PS2_LoadingScreenBegin()
     s_bytesRead   = 0;
     s_fileName[0] = '\0';
     Draw();
+
+    // The plaque's lifetime is this screen's, timeout included, so the sound output is held
+    // across it from here: a load blocks the frame for seconds at a time, and audsrv would
+    // loop the last tenth of a second it was given until the frames came back. The level's
+    // music then starts as the plaque comes down rather than under it. See sound_hold.h.
+    PS2_SoundSetLoadingHold(1);
 }
 
 void PS2_LoadingScreenEnd()
@@ -73,6 +80,7 @@ void PS2_LoadingScreenEnd()
                        s_drawCount, s_fileCount, s_bytesRead / 1024u, Sys_Milliseconds() - s_beginMsec);
     }
     s_active = false;
+    PS2_SoundSetLoadingHold(0);
 }
 
 void PS2_LoadingScreenNoteFile(const char * fileName, const int lengthBytes)

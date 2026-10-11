@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "client.h"
 #include "ps2/renderer/loading_screen.h" // [PS2_QUAKE]
+#include "ps2/audio/sound_hold.h"         // [PS2_QUAKE]
 #include "ps2/debug/load_trace.h"        // [PS2_QUAKE]
 
 float scr_con_current; // aproaches scr_conlines at scr_conspeed
@@ -635,6 +636,7 @@ void SCR_BeginLoadingPlaque(void)
     IN_RumbleStop(); // [PS2_QUAKE]: no frames run during the load, the motors would keep going.
     cl.sound_prepped = false; // don't play ambients
     CDAudio_Stop();
+    PS2_SoundSilence(); // [PS2_QUAKE]: or audsrv loops its last tenth of a second through the load.
 
     if (cls.disable_screen)
         return;

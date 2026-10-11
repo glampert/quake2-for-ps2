@@ -17,6 +17,7 @@
  * This source code is released under the GNU GPL v2 license.
  * ================================================================================================ */
 
+#include "ps2/audio/sound_hold.h"
 #include "ps2/save/save_system.h"
 #include "ps2/save/working_set.h"
 #include "ps2/save/slot_archive.h"
@@ -55,6 +56,14 @@ Device & ActiveDevice()
     return GetMemoryCardDevice();
 }
 
+// Whether work on 'device' wants the sound output held (audio/sound_hold.h). The memory card
+// blocks the frame for anything from a few hundred milliseconds to over a second, and audsrv
+// would loop its last 106 ms throughout. The emulator's host files are quick enough not to.
+bool HoldsSound(const Device & device)
+{
+    return &device == &GetMemoryCardDevice();
+}
+
 ArchiveStamp CurrentStamp()
 {
     // The engine's own save files are written as fixed-size blocks: server.ssv (comment, map
@@ -91,6 +100,7 @@ void WriteGameDataConfig(const char * text, const u32 sizeBytes)
 void WriteCardConfig(const char * text, const u32 sizeBytes)
 {
     Device & card = GetMemoryCardDevice();
+    const ps2::audio::SoundHoldScope soundHold; // Even to find it unchanged: that is a read.
     if (!card.Probe() || !card.EnsureSaveDir())
     {
         Com_Printf("config.cfg not saved to the memory card.\n");
@@ -143,6 +153,7 @@ char * ReadGameDataConfig(int & outLength)
 char * ReadCardConfig(int & outLength)
 {
     Device & card = GetMemoryCardDevice();
+    const ps2::audio::SoundHoldScope soundHold;
     u32 sizeBytes = 0;
     if (!card.Probe() || !card.FileSize(kConfigFile, sizeBytes) || sizeBytes == 0 || sizeBytes > kMaxConfigBytes)
     {
@@ -251,7 +262,9 @@ qboolean Sys_SaveStoreSlot(const char * slot, const char * comment)
         SetError("Save name too long: '%s'.", slot);
         return 0;
     }
-    return StoreSlot(ActiveDevice(), slot, comment, CurrentStamp()) ? 1 : 0;
+    Device & device = ActiveDevice();
+    const ps2::audio::SoundHoldScope soundHold(HoldsSound(device));
+    return StoreSlot(device, slot, comment, CurrentStamp()) ? 1 : 0;
 }
 
 qboolean Sys_SaveRestoreSlot(const char * slot)
@@ -262,7 +275,9 @@ qboolean Sys_SaveRestoreSlot(const char * slot)
         SetError("Save name too long: '%s'.", slot);
         return 0;
     }
-    return RestoreSlot(ActiveDevice(), slot, CurrentStamp()) ? 1 : 0;
+    Device & device = ActiveDevice();
+    const ps2::audio::SoundHoldScope soundHold(HoldsSound(device));
+    return RestoreSlot(device, slot, CurrentStamp()) ? 1 : 0;
 }
 
 qboolean Sys_SaveListSlots(const char * prefix, const int count, saveslotinfo_t * info)
@@ -272,7 +287,13 @@ qboolean Sys_SaveListSlots(const char * prefix, const int count, saveslotinfo_t 
     const int numSlots = (count < kMaxSlots) ? count : kMaxSlots;
 
     ClearError();
-    const bool ready = ListSlots(ActiveDevice(), prefix, numSlots, slots, CurrentStamp());
+    Device & device = ActiveDevice();
+    bool ready = false;
+    {
+        // The save and load menus list the slots as they open: one header read per slot.
+        const ps2::audio::SoundHoldScope soundHold(HoldsSound(device));
+        ready = ListSlots(device, prefix, numSlots, slots, CurrentStamp());
+    }
 
     for (int i = 0; i < count; ++i)
     {
