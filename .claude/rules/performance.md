@@ -52,6 +52,19 @@ paths:
   dropped. 11.5% of frames overflowed, at 17.3 ms with 2.8 ms of vsync left. The halves stay at
   768 KB anyway, as margin for views heavier than the perf demos': an overflowing frame is the
   one most likely to be near the edge already.
+- **PAL with both fixes** (same console, `ps2_video_mode pal`, profiling release, 2026-10-11),
+  against the PAL capture from before them: 50.1 fps over gameplay (from 49.9), two-field frames
+  8 of 5890 (from 40), frames without 1.7 ms to spare 0.2% (from 4.6%), no drains (from 657).
+  GsWait fell from 5.5 to 3.5 ms, vsync slack rose from 8.4 to 10.1, and EE work held at
+  6.2-6.4. The 8 are the heaviest views of the run (7.6K-9.9K triangles, half of them waste2's
+  49-entity fight near frame 4560), where EE work plus GsWait reaches 20-22 ms.
+- **The demo hitches are the demo's own reads.** Every console capture has the same 7 frames of
+  250-650 ms. Two are mid-demo asset loads (the slugs ammo model; the railgun hum with
+  `a_slugs.pcx`). The other five are SV_Frame refilling the demo stream's 64 KB stdio buffer
+  (`FS_SetStreamBuffer`) from `pak0.pak` on USB: demo1 is 132 KB and demo2 141 KB, so each
+  plays two refills, and the demo switch adds demo2's first fill. One costs 135-630 ms,
+  because it waits out a pending music read (`audio.md`). Server holds the time, one row
+  before the slow Frame (see `frame_budget.py`). Only demo playback streams like this.
 
 ## EE codegen facts
 
@@ -121,8 +134,8 @@ the guard band to 0.25 through a test cvar (since removed), so the PCSX2 compari
   music reader's USB reads: 640 ms is two 8 KB music buffers (see `audio.md`). Input now has its
   own column. **Confirmed** by a second capture with `in_keyboard 0` and the 0.8 band: 7 slow
   frames for 2.6 s of 121 s, and 49.0 fps over gameplay. 2.6% of steady frames were dropped.
-  Of the 7 slow frames, two were mid-demo asset loads (the slugs ammo model, the railgun hum),
-  one a 134 ms Server spike and one the demo switch; three left nothing in the log. A third
+  Of the 7 slow frames, two were mid-demo asset loads (the slugs ammo model, the railgun hum)
+  and four the demo's own reads (see the demo hitches above); one left nothing in the log. A third
   capture, the profiling release with `in_keyboard 1`, confirmed the fix (no poll while a read
   is pending, and the idle polling). It had the same 7 slow frames, 2.9 s, and a keyboard poll
   cost ~221 µs on hardware, on 4.7% of frames. It's not known whether the reads take that long
