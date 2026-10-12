@@ -207,6 +207,11 @@ bool FrameStarted();
 // Full sync/drain of the underlying cmdbuf. Kicks what has been recorded and waits for it.
 void KickAndWait();
 
+// Waits out the frame EndFrame left drawing, if it did, and shows it; then returns the drawing
+// context of the last finished frame, which is what a VRAM readback of the screen copies (see
+// gs::DownloadFramebufferRows). Outside Begin/EndFrame only.
+gs::DrawContext FinishFrameInFlight();
+
 // Sends what this frame has built so far, without waiting for it to be drawn, so the GS starts
 // on it while the EE builds the rest. Skipped when an earlier kick is still in flight, because
 // sending would first wait for that one: this never waits mid-frame. Must be called between

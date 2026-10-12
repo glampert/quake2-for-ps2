@@ -9,7 +9,8 @@ The README's "Rendering" section is the architecture overview. The renderer file
 (refexport), `view.cpp` (world pass, BSP walk, frame pass order), `md2.cpp` (alias models),
 `sky.cpp`, `render_system.*` (`ps2::rs`: VIF1 chains, batches, `DrawTriangles`, `Submit`),
 `cmd_buffer.*`, `gs.*` (GS front-end, register values, 2D), `vram.*` (texture heap),
-`splash_screen.*` (the boot splash, drawn before the renderer exists),
+`splash_screen.*` (the boot splash, drawn before the renderer exists), `screenshot.*` (the
+`screenshot` command),
 `texture.*` (`ps2::tex`), `lightmap.*`, `scrap_atlas.*`, `clip.*` (EE sky clipper), `vu1.*`
 (VU memory layout, microprogram declarations).
 
@@ -48,6 +49,13 @@ The README's "Rendering" section is the architecture overview. The renderer file
 
 ## GS and libdraw
 
+- **VRAM readback** (`gs::DownloadFramebufferRows`, ps2sdk's own sequence, as in the Quake port):
+  BITBLTBUF, TRXPOS, TRXREG, FINISH and TRXDIR=1 go down PATH2 (VIF1 DIRECT) behind MSKPATH3
+  and FLUSHA; wait for FINISH and an empty VIF1 FIFO, set `VIF1_STAT.FDR` and `BUSDIR`, receive
+  by VIF1 DMA, then put both back and unmask PATH3. Nothing may be in flight
+  (`rs::FinishFrameInFlight`, outside a frame), and the target is whole 64-byte lines (sync
+  before, invalidate after). Works in PCSX2 with 16- and 32-bit framebuffers (2026-10-12); not
+  yet tried on a console.
 - **The TV standard is ours to pick, not libgraph's.** `graph_initialize` always takes the
   console's region (`graph_get_region()`: an `E` as the ROM name's 5th character is PAL) and
   has no override. So `gs::Init` makes its calls itself with the mode `ps2_video_mode` chose,

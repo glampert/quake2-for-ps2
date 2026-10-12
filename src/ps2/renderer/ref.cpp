@@ -17,6 +17,7 @@
 #include "ps2/renderer/vu1.h"
 #include "ps2/renderer/cmd_buffer.h"
 #include "ps2/renderer/render_system.h"
+#include "ps2/renderer/screenshot.h"
 #include "ps2/renderer/model.h"
 #include "ps2/renderer/model_load.h"
 #include "ps2/renderer/texture.h"
@@ -604,6 +605,7 @@ qboolean PS2_RefInit(void * hinstance, void * wndproc)
         .standard         = standard
     };
     ps2::rs::Init(gsConfig, scratch.base, scratch.sizeBytes);
+    ps2::screenshot::Init();
 
     s_texConchars = ps2::tex::Find("conchars", ps2::tex::ImageType::Pic);
     s_texBacktile = ps2::tex::Find("backtile", ps2::tex::ImageType::Pic);

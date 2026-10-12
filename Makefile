@@ -113,6 +113,7 @@ PS2_CXX_SRC =                         \
 	ps2/renderer/clip.cpp             \
 	ps2/renderer/loading_screen.cpp   \
 	ps2/renderer/splash_screen.cpp    \
+	ps2/renderer/screenshot.cpp       \
 	ps2/tests/draw_cube.cpp           \
 	ps2/tests/cinematics.cpp          \
 	ps2/tests/map_cycle.cpp           \
@@ -191,6 +192,7 @@ SIZE_OPT_CXX_SRC =                    \
 	ps2/renderer/vid.cpp              \
 	ps2/renderer/loading_screen.cpp   \
 	ps2/renderer/splash_screen.cpp    \
+	ps2/renderer/screenshot.cpp       \
 	ps2/save/save_api.cpp             \
 	ps2/save/slot_archive.cpp         \
 	ps2/save/save_device.cpp          \

@@ -1017,11 +1017,19 @@ largest block of IOP memory still free;
 `in_keyboardmap <usage> <key>` remaps a USB scan code; `ps2_saveinfo` lists the save working
 set (raw and deflated sizes) and the files on the save device.
 
+**Screenshots:** `screenshot` ([screenshot.cpp](src/ps2/renderer/screenshot.cpp)), as ref_gl
+registers it, reads the last finished frame back out of GS VRAM, turning the GS bus around for
+it, and writes an uncompressed 24-bit TGA to `baseq2/scrnshot/quakeNN.tga`, the first number
+free. `screenshot <name>` writes `scrnshot/<name>.tga` instead, replacing one already there, so
+a scripted test can name its shots. The frame comes out 32 rows at a time and each strip is
+written as it arrives, so a shot needs 100-140 KB of heap rather than a whole frame.
+
 **Debug page:** Options → debug ([debug_menu.cpp](src/ps2/debug/debug_menu.cpp)) puts these
 on the gamepad, for a console with no keyboard: `log to file` (`ps2_logfile`, changed with
 left/right), `dump IOP modules` (`ps2_dump_iop_mods`), `list saves` (`ps2_saveinfo`),
 `save console to file` (`condump console`, the console's last ~420 lines in
-`baseq2/console.txt`), and in the builds that have them `quit after a test` (`ps2_test_quit`),
+`baseq2/console.txt`), `take screenshot` (which closes the menu and runs `screenshot` a frame
+later, so the shot has no menu on it), and in the builds that have them `quit after a test` (`ps2_test_quit`),
 `start perf test` (`ps2_perftest`, profiling builds) and `start map cycle` (`ps2_testmaps`, debug
 builds). The two report rows open the console on what they printed, stopping the attract loop
 first as "go to console" does; L2/R2 scroll it, and Select goes back to the demos. Every level

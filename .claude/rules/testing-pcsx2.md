@@ -28,8 +28,20 @@
 ## Working with the user's machine
 
 - Claude can't screenshot PCSX2 (`screencapture` is denied) or send it keystrokes (`osascript`
-  is denied). Menus, popups, icons and anything visual need the user's eyes. Say so instead
-  of guessing.
+  is denied), **but the game can screenshot itself** (since 2026-10-12): `screenshot` reads the
+  last finished frame out of GS VRAM into `baseq2/scrnshot/quakeNN.tga` (the first number
+  free), and `screenshot <name>` into `scrnshot/<name>.tga`. Convert with
+  `sips -s format png baseq2/scrnshot/<name>.tga --out <scratchpad>/<name>.png` and Read the
+  PNG; delete `baseq2/scrnshot/` afterwards. Outside what the game draws (the PS2 BIOS,
+  PCSX2's own UI, the memory card browser's icon) anything visual still needs the user's eyes.
+- **A screenshot recipe that worked** (2026-10-12): a temporary block in `CDAudio_Play` that
+  runs once, queuing `alias w10 "wait;..."` (ten waits), `alias w100 "w10;..."` (ten w10s),
+  then `w100;w100;w100;screenshot demo;menu_main;w100;screenshot menu`: the attract demo with
+  its HUD, then the main menu over it. `screenshot splash` queued in `Qcommon_Init` before
+  `d1` catches the boot splash, since no frame has been presented yet and frame 0 still holds
+  it (with a 16-bit framebuffer; a 32-bit one comes back black, cleared by `gs::Init`).
+  `ps2_debug_overlays 0` and `ps2_show_fps 0` keep the panels out of a shot. A 16-bit
+  framebuffer reads back at 5 bits a channel. Each shot is 860 KB at 640x448.
 - The user may be at the machine while a run is up, and may close it. Don't relaunch PCSX2
   after they close a run without a reason.
 - Runs read and rewrite `baseq2/config.cfg` (gitignored; the quit writes archived cvars back).
@@ -76,15 +88,16 @@ Four traps. Each looks like a game crash or hang:
 calls `Key_Event(key, true, 0)` then `Key_Event(key, false, 0)` per press goes through the real
 menu code; printing `cls.key_dest`/`cls.state` around it shows where it left the client. Spin
 controls change with left/right only: Enter does nothing on them (qmenu's `Menu_SelectItem`).
-The debug page was tested this way (2026-10-12), fired from the `CDAudio_Play` hook.
+The debug page was tested this way (2026-10-12), fired from the `CDAudio_Play` hook. A
+`screenshot` after the presses shows the page itself.
 
 ## Built-in tests (debug builds; set the cvar via config.cfg or the Qcommon_Init hook)
 
 - `ps2_testmaps 1`: MapCycle over all 39 maps. Prints per-map memory lines plus a "load peak"
   line per transition. ~15 min. See [memory-budget.md](memory-budget.md).
 - On a console without a keyboard, the Options menu's debug page (debug_menu.cpp) starts
-  `ps2_perftest` and `ps2_testmaps`, toggles `ps2_logfile` and `ps2_test_quit`, and runs the IOP
-  and save reports.
+  `ps2_perftest` and `ps2_testmaps`, toggles `ps2_logfile` and `ps2_test_quit`, runs the IOP
+  and save reports, and takes a screenshot without the menu in it.
 - **All three tests quit when they finish unless `ps2_test_quit` is 0** (tests/test_quit.cpp).
   The save test quits too, since 2026-10-12; it puts `ps2_savedevice` back first, so the
   config the quit writes keeps the user's `"mc"`. Each quit writes `config.cfg` (host) and its

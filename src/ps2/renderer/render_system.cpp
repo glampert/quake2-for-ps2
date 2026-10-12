@@ -719,6 +719,17 @@ bool FrameStarted()
     return s_frameStarted;
 }
 
+gs::DrawContext FinishFrameInFlight()
+{
+    PS2_AssertMsg(!s_frameStarted, "FinishFrameInFlight inside a frame!");
+
+    // Shown now rather than at the next BeginFrame, whose own call then has nothing to do.
+    PresentFrameInFlight();
+
+    // EndFrame moved s_drawCtx past the frame it closed.
+    return gs::NextDrawContext(s_drawCtx);
+}
+
 void KickAndWait()
 {
     cmdbuf::Drain();

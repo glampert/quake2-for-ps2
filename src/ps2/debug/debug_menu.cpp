@@ -44,6 +44,7 @@ static menulist_s      s_logFileSpin;
 static menuaction_s    s_dumpIopAction;
 static menuaction_s    s_saveInfoAction;
 static menuaction_s    s_dumpConsoleAction;
+static menuaction_s    s_screenshotAction;
 #if PS2_QUAKE_PROFILE || PS2_QUAKE_DEBUG
 static menulist_s      s_testQuitSpin;
 #endif // PS2_QUAKE_PROFILE || PS2_QUAKE_DEBUG
@@ -128,6 +129,15 @@ void DumpConsole(void *)
         std::fclose(file);
     }
     std::snprintf(s_feedback, sizeof(s_feedback), "%s %s", (file != nullptr) ? "wrote" : "couldn't write", path);
+}
+
+// Closes the menu and saves the screen without it (renderer/screenshot.h). The command reads back
+// the last frame finished, which still has the menu on it, so it waits a frame: by the next
+// Cbuf_Execute this frame has been drawn without the menu.
+void TakeScreenshot(void *)
+{
+    M_ForceMenuOff();
+    Cbuf_AddText("wait\nscreenshot\n");
 }
 
 #if PS2_QUAKE_PROFILE || PS2_QUAKE_DEBUG
@@ -218,6 +228,8 @@ void Init()
               "the save working set and the files on the save device", ListSaves);
     AddAction(s_dumpConsoleAction, y += 10, "save console to file",
               "write the console's text to console.txt in baseq2/", DumpConsole);
+    AddAction(s_screenshotAction, y += 10, "take screenshot",
+              "close the menu, then save the screen to baseq2/scrnshot/", TakeScreenshot);
 
     y += 10; // A blank row between groups, as on the video page.
 #if PS2_QUAKE_PROFILE || PS2_QUAKE_DEBUG

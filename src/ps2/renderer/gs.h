@@ -258,6 +258,20 @@ constexpr u32 kPresentTicksPerSec = 147456000u / 256u;
 const PresentClock & GetPresentClock();
 
 // ------------------------------------------------------------------------------------------------
+// Readback
+// ------------------------------------------------------------------------------------------------
+
+// The framebuffers' pixel format: GS_PSM_16 or GS_PSM_32, as Config chose.
+Q_ALWAYS_INLINE int FramebufferPsm() { return static_cast<int>(detail::g_state.framebuffer[0].psm); }
+
+// Copies 'rows' rows of context 'ctx''s framebuffer, from row 'y' down, out of VRAM into 'dst', in
+// the framebuffer's own pixel format: Width() * rows pixels of 2 or 4 bytes. The GS turns its bus
+// around for this and the VIF1 channel carries the pixels back, so nothing may be in flight:
+// call it outside a frame, after rs::FinishFrameInFlight. 'dst' is a DMA target: 64-byte
+// aligned, and the rows a whole number of cache lines (any row count is, at these widths).
+void DownloadFramebufferRows(DrawContext ctx, int y, int rows, void * dst);
+
+// ------------------------------------------------------------------------------------------------
 // Texture VRAM
 // ------------------------------------------------------------------------------------------------
 

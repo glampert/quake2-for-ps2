@@ -31,6 +31,7 @@
 #include "ps2/renderer/profile.h"
 #include "ps2/system/heap.h"
 
+#include <cstdint> // std::uintptr_t
 #include <cstring> // memset
 #include <optional>
 #include <dma.h>
@@ -43,6 +44,9 @@
 #include <draw2d.h>
 #include <draw_buffers.h>
 #include <draw_sampling.h>
+#include <gs_privileged.h> // GS_REG_CSR / GS_REG_BUSDIR
+#include <vif_codes.h>
+#include <vif_registers.h> // VIF1_STAT
 
 namespace ps2::gs {
 namespace {
@@ -554,6 +558,89 @@ void PresentFramebuffer(const DrawContext ctx)
 const PresentClock & GetPresentClock()
 {
     return s_presentClock;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Readback
+// ------------------------------------------------------------------------------------------------
+
+// The sequence is ps2sdk's own (ee/debug/screenshot.c), which runs on hardware and in PCSX2; it is
+// reimplemented here rather than linked because that one DMAs into a buffer with no alignment
+// guarantee, one row per transfer. The Quake port's renderer has the same (quake-ps2, gs.cpp).
+void DownloadFramebufferRows(const DrawContext ctx, const int y, const int rows, void * const dst)
+{
+    const framebuffer_t & fb = detail::g_state.framebuffer[Index(ctx)];
+    const int psm   = static_cast<int>(fb.psm);
+    const int width = static_cast<int>(fb.width);
+    const u32 bytes = static_cast<u32>(width * rows * ((psm == GS_PSM_16) ? 2 : 4));
+
+    PS2_Assert(y >= 0 && rows > 0 && (y + rows) <= static_cast<int>(fb.height));
+    PS2_AssertMsg((reinterpret_cast<std::uintptr_t>(dst) & 63u) == 0 && (bytes & 63u) == 0,
+                  "Readback target must be whole, aligned cache lines!");
+
+    // The request goes down PATH2, VIF1 DIRECT, rather than the GIF channel the uploads use: the
+    // VIF1 FIFO is what turns around to carry the pixels back. MSKPATH3 holds PATH3 off until the
+    // bus is the right way round again, and FLUSHA lets every path drain first. The EE waits on
+    // the FINISH ahead of TRXDIR to know the GS has the request before it turns the bus.
+    const u64 bitBltBuf = GS_SET_BITBLTBUF(fb.address >> 6, fb.width >> 6, psm, 0, 0, psm);
+    const u64 trxPos    = GS_SET_TRXPOS(0, y, 0, 0, 0);
+    const u64 trxReg    = GS_SET_TRXREG(width, rows);
+    const u64 trxDir    = GS_SET_TRXDIR(1); // local -> host
+    const u64 gifTag    = GIF_SET_TAG(5, 1, 0, 0, GIF_FLG_PACKED, 1);
+
+    alignas(64) static u64 s_request[14];
+    u32 * const vifCodes = static_cast<u32 *>(static_cast<void *>(s_request));
+    vifCodes[0] = VIF_CODE(0, 0, VIF_CMD_NOP, 0);
+    vifCodes[1] = VIF_CODE(0x8000, 0, VIF_CMD_MSKPATH3, 0);
+    vifCodes[2] = VIF_CODE(0, 0, VIF_CMD_FLUSHA, 0);
+    vifCodes[3] = VIF_CODE(6, 0, VIF_CMD_DIRECT, 0);
+    s_request[2]  = gifTag;    s_request[3]  = GIF_REG_AD;
+    s_request[4]  = bitBltBuf; s_request[5]  = GS_REG_BITBLTBUF;
+    s_request[6]  = trxPos;    s_request[7]  = GS_REG_TRXPOS;
+    s_request[8]  = trxReg;    s_request[9]  = GS_REG_TRXREG;
+    s_request[10] = 0;         s_request[11] = GS_REG_FINISH;
+    s_request[12] = trxDir;    s_request[13] = GS_REG_TRXDIR;
+
+    // And the one that lets PATH3 back in afterwards.
+    alignas(64) static u32 s_unmaskPath3[4];
+    s_unmaskPath3[0] = VIF_CODE(0, 0, VIF_CMD_MSKPATH3, 0);
+    s_unmaskPath3[1] = VIF_CODE(0, 0, VIF_CMD_NOP, 0);
+    s_unmaskPath3[2] = VIF_CODE(0, 0, VIF_CMD_NOP, 0);
+    s_unmaskPath3[3] = VIF_CODE(0, 0, VIF_CMD_NOP, 0);
+
+    // VIF1_STAT.FDR: the VIF1 FIFO's direction, set for VIF1 -> memory. FQC is how full it is.
+    constexpr u32 kVif1StatFdr   = 1u << 23;
+    constexpr u32 kVif1StatFqc   = 0x1Fu << 24;
+    constexpr u64 kCsrFinish     = GS_SET_CSR(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    constexpr u64 kImrFinishMask = 1u << 9; // FINISHMSK: the event is polled here, not taken
+
+    const u64 prevImr = GsPutIMR(GsGetIMR() | kImrFinishMask);
+    *GS_REG_CSR = kCsrFinish; // clear any earlier FINISH event
+
+    dma_channel_send_normal(DMA_CHANNEL_VIF1, s_request, 7, 0, 0);
+    dma_channel_wait(DMA_CHANNEL_VIF1, 0);
+    while ((*GS_REG_CSR & kCsrFinish) == 0) {}
+    while ((VIF1_STAT & kVif1StatFqc) != 0) {}
+
+    // Turn the bus around and let the VIF1 channel pull the rows in. Nothing dirty may be left
+    // over 'dst' to be written back on top of what arrives, and nothing cached may be read
+    // instead of it afterwards.
+    VIF1_STAT      = kVif1StatFdr;
+    *GS_REG_BUSDIR = GS_SET_BUSDIR(1);
+
+    SyncDCache(dst, static_cast<u8 *>(dst) + bytes);
+    dma_channel_receive_normal(DMA_CHANNEL_VIF1, dst, static_cast<int>(bytes), 0, 0);
+    dma_channel_wait(DMA_CHANNEL_VIF1, 0);
+    InvalidDCache(dst, static_cast<u8 *>(dst) + bytes);
+
+    VIF1_STAT      = 0;
+    *GS_REG_BUSDIR = GS_SET_BUSDIR(0);
+
+    GsPutIMR(prevImr);
+    *GS_REG_CSR = kCsrFinish;
+
+    dma_channel_send_normal(DMA_CHANNEL_VIF1, s_unmaskPath3, 1, 0, 0);
+    dma_channel_wait(DMA_CHANNEL_VIF1, 0);
 }
 
 // ------------------------------------------------------------------------------------------------
