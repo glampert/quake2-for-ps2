@@ -33,6 +33,7 @@
 #include "ps2/tests/map_cycle.h"
 #include "ps2/tests/save_test.h"
 #include "ps2/tests/perf_run.h"
+#include "ps2/tests/test_quit.h"
 #include "ps2/builtin/builtin.h"
 
 #include <algorithm>
@@ -551,6 +552,9 @@ qboolean PS2_RefInit(void * hinstance, void * wndproc)
     s_showDrawStats     = Cvar_Get("ps2_show_drawstats", PS2_QUAKE_DEBUG ? "1" : "0", CVAR_ARCHIVE);
     s_showProfileStats  = Cvar_Get("ps2_show_profile",   PS2_QUAKE_DEBUG ? "1" : "0", CVAR_ARCHIVE);
     ps2::test::RegisterPerfTestCvar(); // Archived, so registered in every build; see perf_run.h.
+#if PS2_QUAKE_DEBUG || PS2_QUAKE_PROFILE
+    ps2::test::RegisterTestQuitCvar();
+#endif // PS2_QUAKE_DEBUG || PS2_QUAKE_PROFILE
 
     const cvar_t * const fbWidth  = Cvar_Get("ps2_fb_width",  "640", CVAR_ARCHIVE);
     const cvar_t * const fbHeight = Cvar_Get("ps2_fb_height", "0",   CVAR_ARCHIVE);

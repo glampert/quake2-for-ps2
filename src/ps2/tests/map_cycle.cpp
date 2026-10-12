@@ -14,6 +14,7 @@
 #if PS2_QUAKE_DEBUG
 #include "ps2/common.h"
 #include "ps2/tests/map_cycle.h"
+#include "ps2/tests/test_quit.h"
 #include "ps2/renderer/model.h"
 
 #include <cstdio>
@@ -58,8 +59,9 @@ enum class State
 };
 
 // A map that never comes up is a failed test, not a reason to hang forever. The
-// slowest stock load measured is ~8 s (power2 from host:), so this is generous.
-constexpr int kLoadTimeoutMs = 90 * 1000;
+// allowance is a console's, as the perf test's is: from host: the slowest stock
+// load measured is ~8 s (power2), but over USB a load has taken over two minutes.
+constexpr int kLoadTimeoutMs = 240 * 1000;
 
 // The world has to be resident for this many frames before we call it loaded.
 // Guards the window between Cbuf_AddText and Cbuf_Execute, where the *previous*
@@ -69,7 +71,6 @@ constexpr int kFramesToConfirm = 2;
 static State  s_state         = State::Idle;
 static int    s_nextMap       = 0;
 static bool   s_done          = false;
-static bool   s_quitOnFinish  = true;
 static int    s_issuedAtMs    = 0;
 static int    s_dwellUntilMs  = 0;
 static int    s_confirmFrames = 0;
@@ -235,13 +236,14 @@ void Finish()
     static int s_passesRun = 0;
     ReportHeap(++s_passesRun);
 
-    if (s_quitOnFinish)
+    // Staying up for another test, it can run again from the first map: the passes are
+    // numbered on (above), so drift between them shows.
+    if (EndTest("MapCycle", "ps2_testmaps"))
     {
-        Com_Printf("MapCycle test completed - quitting now...\n");
-        Cbuf_AddText("quit\n");
+        s_done = true;
+        return;
     }
-
-    s_done = true;
+    Restart();
 }
 
 // Issues the next map, skipping any that are not in the pak. Returns false when

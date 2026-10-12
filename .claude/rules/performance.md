@@ -267,15 +267,17 @@ the guard band to 0.25 through a test cvar (since removed), so the PCSX2 compari
   `rm -rf build/release/src && make release CONFIG_DEFS='-DPS2_QUAKE_DEBUG=0 -DPS2_QUAKE_ASSERTS=0 -DPS2_QUAKE_PROFILE=1 -DPS2_QUAKE_FRAME_LOG_FILE=1 -DNDEBUG'`,
   then the same `rm -rf` and a plain `make release` afterwards. Keep `ps2_logfile` off for a
   capture, since every console print through it is a ~23 ms USB write. The perf test allows
-  240 s for a USB map load.
+  240 s for a USB map load. Start it from the Options menu's debug page ("start perf test"),
+  or with `ps2_perftest "1"` in the config.
 
 ## Capture recipe (`ps2_perftest`, ~2.5 min, debug build)
 
 1. Back up `baseq2/config.cfg` and set `ps2_perftest "1"` in it. `make run`.
 2. Wait for `PerfRun: complete` / `FLOG#end` in emulog, then copy `emulog.txt` into
    `build/baselines/<tag>.emulog.txt` before the next launch overwrites it.
-3. Restore the config. The run sets `ps2_show_fps` and the like to 0, and those are
-   `CVAR_ARCHIVE`, so the quit writes them back.
+3. Restore the config: the quit rewrites it. Since 2026-10-12 the run puts back the panel cvars
+   and `developer` it changed before quitting (verified: the written config kept all five
+   `ps2_show_*` at 1), so only `ps2_perftest` differs, set back to 0.
 4. `src/tools/scripts/frame_log/summarize_flog.py <emulog> --rows build/baselines/<tag>.flog`,
    then `compare_flog.py <before> <after>`. `frame_budget.py` realigns Server/ClParse (they
    land one row early) and lists each `FLOG#open` load with its cost.

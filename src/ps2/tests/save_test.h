@@ -7,7 +7,7 @@
  *        "ps2_testsaves 1" runs it against host files; "2" repeats the save and load on the
  *        memory card as well; "3" only loads the slot 7 save an earlier run left behind, to
  *        check that a save outlives a rebuild. Each step logs a "SaveTest:" line and the run
- *        ends with a PASS/FAIL summary.
+ *        ends with a PASS/FAIL summary, then quits unless "ps2_test_quit" is 0 (test_quit.h).
  *
  * This source code is released under the GNU GPL v2 license.
  * ================================================================================================ */

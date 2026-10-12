@@ -35,6 +35,10 @@
 - Runs read and rewrite `baseq2/config.cfg` (gitignored; the quit writes archived cvars back).
   **Back it up before a scripted or perf run and restore it after.** The user's config has
   `ps2_savedevice "mc"`. Start every run of a comparison from the same config.
+- **Every level a run loads autosaves slot 0 to the save device**, and with that config it is
+  the PCSX2 card (`Mcd001.ps2`), which the user also uses for other projects (a `Q1PS2` folder).
+  Back the card up before a run that loads a map, or set `ps2_savedevice "host"` in the
+  backed-up config for the run (slot 0 then lands in `baseq2/save/`, replacing that one).
 
 ## Scripting a session
 
@@ -48,7 +52,7 @@ finds it, and the PS2 `Sys_FindFirst` (src/ps2/system/sys.cpp) always returns nu
   `Cbuf_AddText("<first alias>\n")` right after the `d1` block in `Qcommon_Init`, with a first
   segment of `killserver;wait;demomap demo1.dm2` (this mirrors `ps2_perftest`).
 
-Three traps. Each one looks like a game crash, and all of them reproduce at HEAD:
+Four traps. Each looks like a game crash or hang:
 
 1. **A quoted token of 128+ chars corrupts memory.** id's `COM_Parse` truncates at
    `MAX_TOKEN_CHARS` but then writes `com_token[128] = 0`, one byte past the array. In this
@@ -60,13 +64,33 @@ Three traps. Each one looks like a game crash, and all of them reproduce at HEAD
    asserts "Loading a world model the collision model is not holding!". End a segment at
    `map`/`demomap` and continue from an event, e.g. a temporary `Cbuf_AddText` of the next
    alias from `CDAudio_Play`, which `CL_PrepRefresh` calls once loading is done.
-3. **`wait` runs twice per frame** (`Cbuf_Execute` in both `Qcommon_Frame` and
+3. **`CDAudio_Play` runs while the level's loading plaque is still up.** It comes down at the
+   first valid frame after. Stopping the attract loop from a command queued there, without
+   `SCR_EndLoadingPlaque` (the console toggle calls it; `CL_Disconnect` doesn't), left the
+   plaque up: no frame was drawn, so the map cycle, which runs from `PS2_EndFrame`, waited
+   out the 150 s plaque timeout.
+4. **`wait` runs twice per frame** (`Cbuf_Execute` in both `Qcommon_Frame` and
    `CL_SendCommand`), and much more often with no map up. Frame-count waits are a rough clock.
+
+**Menus can be tested without a screen or keys.** A temporary command that opens the page and
+calls `Key_Event(key, true, 0)` then `Key_Event(key, false, 0)` per press goes through the real
+menu code; printing `cls.key_dest`/`cls.state` around it shows where it left the client. Spin
+controls change with left/right only: Enter does nothing on them (qmenu's `Menu_SelectItem`).
+The debug page was tested this way (2026-10-12), fired from the `CDAudio_Play` hook.
 
 ## Built-in tests (debug builds; set the cvar via config.cfg or the Qcommon_Init hook)
 
 - `ps2_testmaps 1`: MapCycle over all 39 maps. Prints per-map memory lines plus a "load peak"
   line per transition. ~15 min. See [memory-budget.md](memory-budget.md).
+- On a console without a keyboard, the Options menu's debug page (debug_menu.cpp) starts
+  `ps2_perftest` and `ps2_testmaps`, toggles `ps2_logfile` and `ps2_test_quit`, and runs the IOP
+  and save reports.
+- **All three tests quit when they finish unless `ps2_test_quit` is 0** (tests/test_quit.cpp).
+  The save test quits too, since 2026-10-12; it puts `ps2_savedevice` back first, so the
+  config the quit writes keeps the user's `"mc"`. Each quit writes `config.cfg` (host) and its
+  card copy: restore both after a run. At 0, one session ran a map cycle, the save test, the perf
+  test and a second map cycle back to back (2026-10-12, map list cut to two), each started when
+  the one before ended.
 - `ps2_testsaves 1|2|3`: save/level-change/load on host files (1) or the memory card (2), and
   load-across-a-rebuild (3). Ends in `SaveTest: PASS`/`FAIL`. Run 1 after touching
   `g_save.c` or saved game structs.

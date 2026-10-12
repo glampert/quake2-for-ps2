@@ -13,6 +13,7 @@
 #if PS2_QUAKE_DEBUG
 #include "ps2/common.h"
 #include "ps2/tests/save_test.h"
+#include "ps2/tests/test_quit.h"
 #include "ps2/save/working_set.h"
 
 // Client state, as in input/rumble.cpp; the legacy headers redeclare a few q_common.h functions.
@@ -84,6 +85,10 @@ static int  s_issuedAtMs     = 0;
 static int  s_startAtMs      = 0;
 static int  s_failures       = 0;
 
+// The save device when the run started, put back at its end: the steps switch it, and the quit
+// that may follow writes it to config.cfg.
+static char s_saveDeviceAtStart[16] = {};
+
 bool InGameOn(const char * map)
 {
     char bsp[MAX_QPATH];
@@ -118,7 +123,27 @@ void Finish()
                static_cast<unsigned>(stats.totalBytes), static_cast<unsigned>(stats.peakBytes));
     Com_Printf("SaveTest: %s (%d failure%s)\n", (s_failures == 0) ? "PASS" : "FAIL",
                s_failures, (s_failures == 1) ? "" : "s");
-    s_done = true;
+
+    if (s_saveDeviceAtStart[0] != '\0')
+    {
+        Cvar_Set("ps2_savedevice", s_saveDeviceAtStart);
+    }
+
+    if (EndTest("SaveTest", "ps2_testsaves"))
+    {
+        s_done = true;
+        return;
+    }
+
+    // Staying up for another test: back to the start, for whichever mode is asked for next.
+    s_steps      = kSteps;
+    s_numSteps   = ps2::ArrayLength(kSteps);
+    s_step       = -1;
+    s_stepIssued = false;
+    s_frames     = 0;
+    s_issuedAtMs = 0;
+    s_startAtMs  = 0;
+    s_failures   = 0;
 }
 
 void Advance(const bool withCard)
@@ -152,6 +177,7 @@ void RunSaveTest()
         if (s_startAtMs == 0)
         {
             s_startAtMs = now + kStartDelayMs;
+            std::snprintf(s_saveDeviceAtStart, sizeof(s_saveDeviceAtStart), "%s", Cvar_VariableString("ps2_savedevice"));
             if (loadOnly)
             {
                 s_steps    = kLoadOnlySteps;

@@ -18,7 +18,8 @@ namespace ps2::test {
 // Advances the map cycle test by one frame. Call every frame from PS2_EndFrame.
 // Gated by the "ps2_testmaps" cvar; a no-op when it is 0 and once the last map
 // has been visited. "ps2_testmaps_dwell" sets the seconds spent in each map
-// after it finishes loading.
+// after it finishes loading. The pass ends in a quit unless "ps2_test_quit" is 0,
+// which leaves the game up and the test ready to run again (test_quit.h).
 void RunMapCycle();
 
 } // namespace ps2::test

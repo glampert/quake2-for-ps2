@@ -1017,11 +1017,32 @@ largest block of IOP memory still free;
 `in_keyboardmap <usage> <key>` remaps a USB scan code; `ps2_saveinfo` lists the save working
 set (raw and deflated sizes) and the files on the save device.
 
+**Debug page:** Options → debug ([debug_menu.cpp](src/ps2/debug/debug_menu.cpp)) puts these
+on the gamepad, for a console with no keyboard: `log to file` (`ps2_logfile`, changed with
+left/right), `dump IOP modules` (`ps2_dump_iop_mods`), `list saves` (`ps2_saveinfo`),
+`save console to file` (`condump console`, the console's last ~420 lines in
+`baseq2/console.txt`), and in the builds that have them `quit after a test` (`ps2_test_quit`),
+`start perf test` (`ps2_perftest`, profiling builds) and `start map cycle` (`ps2_testmaps`, debug
+builds). The two report rows open the console on what they printed, stopping the attract loop
+first as "go to console" does; L2/R2 scroll it, and Select goes back to the demos. Every level
+the tests load autosaves slot 0 to the save device, the memory card on a console. A console's
+perf capture reaches a file only in a `PS2_QUAKE_FRAME_LOG_FILE=1` build (see
+[performance.md](.claude/rules/performance.md)).
+
+**Ending a test:** the perf test, the map cycle and the save test quit the game when they finish
+while `ps2_test_quit` is 1, the default (it isn't archived, so every boot starts there). At 0 the
+game stays up: the test sets its cvar back to 0 and can be started again, or another one, in the
+same session. The perf test puts back `developer` and the debug panels it turns off for the
+capture, before any quit, so the config the quit writes keeps them as they were; the frame log
+alone goes off at the end, whatever it was, and a second run in the session appends to it after
+its `FLOG#end`. The save test likewise puts `ps2_savedevice` back as it found it.
+
 **Save game test:** `ps2_testsaves 1` plays through saving, level changes, returning to a level
 and loading with the real console commands, checking the player's health comes back as saved;
 `2` repeats the save and load on the memory card; `3` only loads the slot 7 save an earlier run
 left behind, to check a save outlives a rebuild. Every step logs a `SaveTest:` line, and the
-run ends with `SaveTest: PASS` or `FAIL`. Debug builds only.
+run ends with `SaveTest: PASS` or `FAIL`, then quits unless `ps2_test_quit` is 0. Debug builds
+only.
 
 **CD music:** `cd_nocd` (the Options menu's "CD music" toggle), `cd_volume` (0-1, the "music
 volume" slider), `cd_loopcount` / `cd_looptrack` (id's loop-to-ambient rule, default 4 and 11).

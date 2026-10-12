@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "client.h"
 #include "client/qmenu.h"
+#include "ps2/debug/debug_menu.h" // [PS2_QUAKE]
 
 void M_Menu_Main_f(void);
 void M_Menu_Game_f(void);
@@ -1132,6 +1133,7 @@ static menulist_s s_options_cdvolume_box;
 static menulist_s s_options_quality_list;
 static menulist_s s_options_compatibility_list;
 static menulist_s s_options_console_action;
+static menuaction_s s_options_debug_action; // [PS2_QUAKE]
 
 static void CrosshairFunc(void * unused)
 {
@@ -1282,6 +1284,12 @@ static void ConsoleFunc(void * unused)
     cls.key_dest = key_console;
 }
 
+// [PS2_QUAKE]: the backend's debugging aids on the gamepad (ps2/debug/debug_menu.cpp).
+static void DebugMenuFunc(void * unused)
+{
+    PS2_DebugMenuOpen();
+}
+
 static void UpdateSoundQualityFunc(void * unused)
 {
     //
@@ -1362,7 +1370,7 @@ void Options_MenuInit(void)
     ** configure controls menu and menu items
     */
     s_options_menu.x = viddef.width / 2;
-    s_options_menu.y = viddef.height / 2 - 63; // [PS2_QUAKE]: was - 58, re-centred for the music volume row.
+    s_options_menu.y = viddef.height / 2 - 68; // [PS2_QUAKE]: was - 58, re-centred for the music volume and debug rows.
     s_options_menu.nitems = 0;
 
     s_options_sfxvolume_slider.generic.type = MTYPE_SLIDER;
@@ -1503,6 +1511,14 @@ void Options_MenuInit(void)
     s_options_console_action.generic.name = "go to console";
     s_options_console_action.generic.callback = ConsoleFunc;
 
+    // [PS2_QUAKE] 2026-10-12
+    // The debug page, for a console with no keyboard to type commands with.
+    s_options_debug_action.generic.type = MTYPE_ACTION;
+    s_options_debug_action.generic.x = 0;
+    s_options_debug_action.generic.y = 190;
+    s_options_debug_action.generic.name = "debug";
+    s_options_debug_action.generic.callback = DebugMenuFunc;
+
     ControlsSetMenuItemValues();
 
     Menu_AddItem(&s_options_menu, (void *)&s_options_sfxvolume_slider);
@@ -1522,6 +1538,7 @@ void Options_MenuInit(void)
     Menu_AddItem(&s_options_menu, (void *)&s_options_customize_options_action);
     Menu_AddItem(&s_options_menu, (void *)&s_options_defaults_action);
     Menu_AddItem(&s_options_menu, (void *)&s_options_console_action);
+    Menu_AddItem(&s_options_menu, (void *)&s_options_debug_action); // [PS2_QUAKE]
 }
 
 void Options_MenuDraw(void)

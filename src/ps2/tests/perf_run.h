@@ -31,9 +31,11 @@ void RegisterPerfTestCvar();
 // From there it takes itself: forces "developer 0" and "ps2_frame_log 1", turns
 // off the on-screen debug panels (1.80ms a frame, and the frame log records
 // everything they show), drops whatever the startup left running, plays each
-// attract loop demo once, ends the frame log cleanly and quits. The emulator log
+// attract loop demo once, ends the frame log cleanly, puts developer and the
+// panels back as they were (the frame log goes off), and quits. The emulator log
 // then holds one complete capture, terminated by an "FLOG#end" row so a truncated
-// one is recognisable.
+// one is recognisable. With "ps2_test_quit 0" it stays up instead, and can be
+// armed again (test_quit.h); a second run appends to the same frame log.
 //
 // One shot: the cvar is archived and set back to 0 before quitting, so the config
 // written on the way out disarms the next launch. A run that does not finish

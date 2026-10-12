@@ -85,8 +85,8 @@ bigger picture.
 | `ps2_show_drawstats` | `1` | `0` | Arch. | Nodes, surfaces, triangles, batches, entities, particles and dlights per frame. |
 | `ps2_show_profile` | `1` | `0` | Arch. | Per-stage frame timings panel; does nothing in release, where the profiler is compiled out. |
 | `ps2_frame_log` | `0` | — | | Log per-frame timings and counters to stdout in batches, for the `frame_log` scripts. |
-| `ps2_logfile` | `0` | `0` | | Copy the console, `Sys_Error` and the reports printed before it (pipeline hang dump, stack traces, out-of-memory stats) to `quake2.log` next to `baseq2/`, one open/append/close per write so a hang leaves the log on the drive. Defaults to `1` in a build with `PS2_QUAKE_LOAD_TRACE` set to 1. |
-| `ps2_perftest` | `0` | `0` | Arch. | Unattended perf run: plays the attract demos with the frame log on, then quits; does nothing in release, where the profiler is compiled out. |
+| `ps2_logfile` | `0` | `0` | | Copy the console, `Sys_Error` and the reports printed before it (pipeline hang dump, stack traces, out-of-memory stats) to `quake2.log` next to `baseq2/`, one open/append/close per write so a hang leaves the log on the drive. Defaults to `1` in a build with `PS2_QUAKE_LOAD_TRACE` set to 1. The Options menu's debug page sets it. |
+| `ps2_perftest` | `0` | `0` | Arch. | Unattended perf run: plays the attract demos with the frame log on, then quits; does nothing in release, where the profiler is compiled out. The debug page's "start perf test" sets it. |
 
 ## Sound and music
 
@@ -124,7 +124,8 @@ bigger picture.
 
 ## Bring-up scenes and tests
 
-All debug builds only.
+All debug builds only, apart from `ps2_test_quit`, which profiling builds register too (for the
+perf test).
 
 | Cvar | Debug | Release | Flags | Description |
 | --- | --- | --- | --- | --- |
@@ -133,9 +134,10 @@ All debug builds only.
 | `ps2_testcube_vram_tex_eviction` | `0` | — | | Slide the cube's textures through a window that forces VRAM evictions and re-uploads. |
 | `ps2_testcube_vulerp` | `0` | — | | Draw the cube through the MD2 keyframe-lerp VU path. |
 | `ps2_testcin` | `0` | — | | Play every stock cinematic in turn. |
-| `ps2_testmaps` | `0` | — | | Load all 39 stock maps in order, logging memory use per map. |
+| `ps2_testmaps` | `0` | — | | Load all 39 stock maps in order, logging memory use per map; a map that takes over 240 s to load is skipped. The debug page's "start map cycle" sets it. |
 | `ps2_testmaps_dwell` | `8` | — | | Seconds `ps2_testmaps` stays in each map once loaded. |
 | `ps2_testsaves` | `0` | — | | Save game test: 1 = host files, 2 = memory card, 3 = load an earlier run's save only. |
+| `ps2_test_quit` | `1` | — | | Quit the game when the perf test, the map cycle or the save test finishes; 0 keeps it up, with the test's cvar back at 0, for the next test. The debug page's "quit after a test" sets it. |
 
 ## Engine cvars with PS2-specific defaults
 

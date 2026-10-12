@@ -20,9 +20,12 @@
 
 #include "ps2/common.h"
 #include "ps2/tests/perf_run.h"
+#include "ps2/tests/test_quit.h"
 #if PS2_QUAKE_PROFILE
 #include "ps2/renderer/profile.h"
 #endif // PS2_QUAKE_PROFILE
+
+#include <cstdio>
 
 namespace ps2::test {
 namespace {
@@ -53,6 +56,40 @@ constexpr int kServerDead = 0; // ss_dead
 constexpr int kLoadTimeoutMs = 240 * 1000;
 constexpr int kPlayTimeoutMs = 10 * 60 * 1000;
 
+// The cvars a run sets for its capture, with the values they take during it. Each one's value
+// from before is put back when the run ends, before any quit, so the config written on the way
+// out keeps the player's settings.
+//
+// developer 0 keeps Com_DPrintf out of the run - each line is a round trip to the IOP, which
+// lands in the timings as a spike in whatever frame it happened to fall in.
+//
+// And every on-screen debug panel off. Measured at 1.80ms per frame with all five on - 13% of
+// the frame's EE work, and enough on its own to push 7% of a capture's frames past the 16.68ms
+// target. The panels are ~900 glyphs, each a textured quad pushed through the 2D path, and none
+// of them is being read during an unattended run: the frame log already carries every number
+// they display, and more.
+//
+// ps2_frame_log is set apart: a second run in the session appends to the same log, so it is
+// turned on for each run and off after it, whatever it was before.
+struct RunCvar
+{
+    const char * name;
+    const char * runValue;
+};
+
+constexpr RunCvar kRunCvars[] = {
+    { "developer",          "0" },
+    { "ps2_show_fps",       "0" },
+    { "ps2_show_memstats",  "0" },
+    { "ps2_show_vramstats", "0" },
+    { "ps2_show_drawstats", "0" },
+    { "ps2_show_profile",   "0" },
+};
+
+// Their values before the run, "" for one that didn't exist then.
+constexpr int kMaxCvarValueLen = 32;
+static char s_savedValues[ArrayLength(kRunCvars)][kMaxCvarValueLen];
+
 enum class State
 {
     Idle,    // Cvars not applied yet; set them and drop whatever is running.
@@ -71,6 +108,26 @@ static int   s_failed      = 0;
 bool ServerIsUp()
 {
     return Com_ServerState() != kServerDead;
+}
+
+void ApplyRunCvars()
+{
+    for (int i = 0; i < ArrayLength(kRunCvars); ++i)
+    {
+        std::snprintf(s_savedValues[i], sizeof(s_savedValues[i]), "%s", Cvar_VariableString(kRunCvars[i].name));
+        Cvar_Set(kRunCvars[i].name, kRunCvars[i].runValue);
+    }
+}
+
+void RestoreRunCvars()
+{
+    for (int i = 0; i < ArrayLength(kRunCvars); ++i)
+    {
+        if (s_savedValues[i][0] != '\0')
+        {
+            Cvar_Set(kRunCvars[i].name, s_savedValues[i]);
+        }
+    }
 }
 
 void StartDemo()
@@ -101,21 +158,24 @@ void NextDemoOrFinish()
     // This also marks the end, which is what tells a completed capture apart from
     // one the emulator cut short.
     ps2::debug::FrameLogFinish();
+    Cvar_Set("ps2_frame_log", "0");
+    RestoreRunCvars();
 
-    // Disarm before quitting, so the config the quit writes has it back at 0. A
-    // run that force-quits the program on startup must not be able to leave the
-    // build in a state where it does that every launch - arming it is a one line
+    // EndTest disarms it before quitting, so the config the quit writes has it back
+    // at 0. A run that force-quits the program on startup must not be able to leave
+    // the build in a state where it does that every launch - arming it is a one line
     // edit, digging back out of it should not need one. A run that never reaches
     // here (a crash, or the emulator being closed) deliberately stays armed.
-    Cvar_Set("ps2_perftest", "0");
+    if (EndTest("PerfRun", "ps2_perftest"))
+    {
+        s_done = true;
+        return;
+    }
 
-    // "quit" through the command buffer rather than Sys_Quit() directly: this runs
-    // from inside PS2_EndFrame with the renderer mid-frame on the stack, and
-    // Qcommon_Shutdown would tear it down underneath itself. The buffer runs the
-    // command from the top of the next Qcommon_Frame, where CL_Quit_f can shut
-    // down in the usual order.
-    Cbuf_AddText("quit\n");
-    s_done = true;
+    // Staying up for another test.
+    s_state    = State::Idle;
+    s_nextDemo = 0;
+    s_failed   = 0;
 }
 #endif // PS2_QUAKE_PROFILE
 
@@ -137,31 +197,11 @@ void RunPerfTest()
     switch (s_state)
     {
     case State::Idle:
-        // Set directly rather than through the command buffer: both have to be in
+        // Set directly rather than through the command buffer: they have to be in
         // effect before the first measured frame, and a queued command would not
-        // run until the next one.
-        //
-        // developer 0 keeps Com_DPrintf out of the run - each line is a round trip
-        // to the IOP, which lands in the timings as a spike in whatever frame it
-        // happened to fall in.
-        Cvar_Set("developer", "0");
+        // run until the next one. See kRunCvars.
+        ApplyRunCvars();
         Cvar_Set("ps2_frame_log", "1");
-
-        // And every on-screen debug panel off. Measured at 1.80ms per frame with
-        // all five on - 13% of the frame's EE work, and enough on its own to push
-        // 7% of a capture's frames past the 16.68ms target. The panels are ~900
-        // glyphs, each a textured quad pushed through the 2D path, and none of
-        // them is being read during an unattended run: the frame log already
-        // carries every number they display, and more.
-        //
-        // These are all CVAR_ARCHIVE and are not restored, so the config written on
-        // the way out keeps them at 0: after a run, set them back to 1 by hand to
-        // get the panels back.
-        Cvar_Set("ps2_show_fps", "0");
-        Cvar_Set("ps2_show_memstats", "0");
-        Cvar_Set("ps2_show_vramstats", "0");
-        Cvar_Set("ps2_show_drawstats", "0");
-        Cvar_Set("ps2_show_profile", "0");
 
         Com_Printf("PerfRun: starting - %d demos, developer 0, overlays off, frame log on.\n",
                    ArrayLength(kDemos));
