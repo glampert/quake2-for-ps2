@@ -77,21 +77,55 @@ paths:
   reset first only for a known conflict (`FindResidentConflict`), and as the fallback when a
   module won't start, when no game data turns up through the launcher's drivers, or when the
   largest free IOP block is under 384 KB. Boot probes host, then HDD/PFS, then USB before
-  `Qcommon_Init`. `-DPS2_QUAKE_ALWAYS_RESET_IOP=1` brings back a reset on every boot.
+  `Qcommon_Init`, except that an ELF launched from `mass:` probes USB only (the user's call,
+  2026-10-12). `-DPS2_QUAKE_ALWAYS_RESET_IOP=1` brings back a reset on every boot.
+- **Where a console's boot time goes** (the user's console, wLaunchELF 4.43a, HDD attached,
+  debug builds, 2026-10-12): the IOP reset takes 175 ms; starting `ps2hdd` takes 3.4 s, most
+  of it the drive answering `sceAtaInit` (ps2hdd only reads a few sectors at start); dev9, atad
+  and pfs under 50 ms together. **A PFS mount pays twice for the disk's layout.** Opening the
+  partition by name walks the APA chain from the start of the disk (`apaFindPartition`): one
+  header read per partition ahead of it, each at that partition's start, so a seek apiece.
+  Then the mount counts free zones (`pfsBitmapCalcFreeZones`), reading the allocation bitmap a
+  1 KB block at a time, one per 8192 zones: for `+QUAKE` (7296 MB) about 114 reads with 8 KB
+  zones, 228 with 4 KB, on a drive that loads at ~1.35 MB/s (performance.md). Mounting it took
+  4.07 s; how that splits between the two isn't measured (time a by-name open of the
+  partition apart from the mount). The drive also holds ~90 OPL games, a partition each, so
+  the chain has 90+ entries for a walk to cross. Searching every partition on a USB launch took 24.6 s: the
+  listing walks the chain once, and every mount walks it again from the start, past ps2hdd's
+  20 cached headers (`-n 20`), then reads its own bitmap. Before and after, from `main()` to
+  the game data:
+
+  | Launch | Old order, with reset | Now |
+  | --- | --- | --- |
+  | USB, HDD attached | 29.0 s | 80 ms (no reset, launcher's usbd and usbhdfsd) |
+  | HDD (`hdd0:+QUAKE:pfs:/`) | 7.7 s | 7.5 s (4.43a reset the IOP itself) |
+
+  So the reset was never the cost; the HDD is. A smaller game partition, early in the chain,
+  mounts faster.
 - **What launchers leave on the IOP** (their sources, read 2026-10-12). wLaunchELF before
   2026-05-26, the 2019 release included, resets the IOP only for an ELF on `hdd0:`. For
   `mass:`/`mc:` it leaves iomanX, fileXio (with a 128 KB buffer), the ROM's SIO2MAN and PADMAN
   (ports closed), ps2sdk's `mcman-old`/`mcserv-old` (`mcman_cex` 2.11, `mcserv` 2.8), cdfs,
   usbd and BDM (usbhdfsd before 2022), and the keyboard, HDD and network drivers if it used
-  them. Since then it launches through ps2sdk's elf-loader2, which resets and loads the ROM's
+  them. On the user's console, 4.43a left 40 modules for a `mass:` launch: the boot ROM's 24,
+  then `AllowDVDV`, `sio2man` 1.1, `Poweroff_Handler`, `IOX/File_Manager` 1.1,
+  `IOX/File_Manager_Rpc` 1.2, `dev9` 2.8, `mcserv` 2.8, `padman` 1.20, `atad` 2.4, `mcman_cex`
+  2.11, `hdd_driver` 2.5, two unnamed (iomanX among them), `usbd` 1.1, `pfs_driver` 2.2 and
+  `usbhdfsd` 1.6, with 576 KB of IOP memory free in one block. Its usbd goes by `usbd`, not
+  ps2sdk's `USB_driver`: ours then found the "usbd" library taken, and the boot fell back to a
+  reset until usbd was also recognised by its library. Its settings can
+  point it at an external `USBD.IRX` (FMCB puts one in `SYS-CONF`). It reset the IOP for an ELF
+  on `hdd0:`, as its source says. Since then it launches through ps2sdk's elf-loader2, which resets and loads the ROM's
   SIO2MAN, MCMAN and MCSERV. A `LoadExecPS2` launch gets EELOAD's set, with XLOADFILE
   (LOADFILE 2.1).
 - **Telling modules apart:** `smod_get_next_mod`, plus the name read by SIF DMA, gives each
   module's IRX_ID name and version. The ROM's SIO2MAN, PADMAN, MCMAN and MCSERV are 1.x
   (`padman` 1.20); the X modules and ps2sdk's are 2.x or 3.x (`sio2man` 3.17, `padman` 3.6).
   ps2sdk's iomanX has no IRX_ID, so it lists unnamed: find it by its export library,
-  `slib_get_exp_lib("iomanx")` after `slib_exp_lib_list()`. `smod_get_mod_by_name` and
-  `slib_get_exp_lib` both match a prefix.
+  `slib_get_exp_lib("iomanx")` after `slib_exp_lib_list()`. usbd is found by its "usbd"
+  library too, whatever its name (`ModuleIdentity::library`). `smod_get_mod_by_name` and
+  `slib_get_exp_lib` both match a prefix. The boot report lists every module running at boot,
+  with versions, and the libraries found.
 - **`sbv_patch_enable_lmb()` returns 1 without patching** for a ROM LOADFILE already patched,
   and for any LOADFILE it doesn't recognise (2.x has the RPC natively). An LMB call to a
   LOADFILE without the RPC hands back the request buffer, which reads as a module started. So
@@ -112,11 +146,13 @@ paths:
   there with `SifAllocIopHeap`, for the boot report and `ps2_dump_iop_mods`.
 - **HDD drivers and limits:** standard `ps2hdd.irx` already uses iomanX; the separately named
   `ps2hdd-iomanx.irx` is a virtual-disk variant without DEV9/ATAD. Use ps2dev9 → ps2atad →
-  ps2hdd → ps2fs. Missing hardware/failed HDD init must fall through to USB. **Don't skip
-  them on a console that has an HDD:** a temporary build that went straight to the USB chain
-  hung on a black screen at boot on the user's console with an HDD attached (2026-10-11),
-  and the same code with the probe back booted from USB. Not diagnosed; PCSX2 with an HDD
-  image didn't reproduce it. To test USB there, move the HDD copy aside. APA's default
+  ps2hdd → ps2fs. Missing hardware/failed HDD init must fall through to USB. **Skipping them
+  once hung a console:** a temporary build that went straight to the USB chain hung on a black
+  screen at boot on the user's console with an HDD attached (2026-10-11), and the same code
+  with the probe back booted from USB. Not diagnosed; PCSX2 with an HDD image didn't reproduce
+  it. A `mass:` launch now skips them (2026-10-12), and an always-reset build launched from
+  USB on that console, HDD attached, booted: the IOP reset and the USB modules only, no HDD
+  driver at all, data at 909 ms. So skipping them wasn't what hung the 2026-10-11 build. APA's default
   one open handle cannot enumerate while PFS is mounted; boot uses `-o 4 -n 20`. PFS's
   default two open files cannot cover pak/music/log/asset reads; boot uses `-m 1 -o 16 -n 40`,
   supplying NUL-separated args. Cache buffers must be at least `2 * maxOpen + 8`.

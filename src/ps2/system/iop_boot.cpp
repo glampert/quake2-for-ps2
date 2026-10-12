@@ -105,11 +105,15 @@ namespace {
 // device name taken. The game's own module comes first in each list, then what a launcher may
 // run for the same job: Sony's LIBSD, the ps2sdk or X-module memory card manager. Names are from
 // ps2sdk's IRX files and the ROM's (SCPH-70012 BIOS 2.00).
+//
+// A module can also be known by the library it exports, whatever its name: iomanX's builds have
+// no IRX_ID at all, and the USB driver wLaunchELF 4.43a left on a console (2026-10-12) didn't go
+// by ps2sdk's name - the game's usbd then found the "usbd" library taken and wouldn't start.
 struct ModuleIdentity
 {
     const char * label;      // the game's name for it: the IRX's file name, or the rom0: path
     const char * names[2];   // what the IOP lists a module doing the job as
-    const char * library;    // iomanX's builds have no IRX_ID: it is known by its export library
+    const char * library;    // the export library any module doing the job registers, or null
     u16          minVersion; // the oldest that talks the protocol of our EE library; 0 for any
 };
 
@@ -122,7 +126,7 @@ constexpr ModuleIdentity kModuleIdentities[] = {
     { "ps2fs",        { "pfs_driver",              nullptr                }, nullptr,  0      },
     { "bdm",          { "bdm",                     nullptr                }, nullptr,  0      },
     { "bdmfs_fatfs",  { "bdmff",                   nullptr                }, nullptr,  0      },
-    { "usbd",         { "USB_driver",              nullptr                }, nullptr,  0      },
+    { "usbd",         { "USB_driver",              nullptr                }, "usbd",   0      },
     { "usbmass_bd",   { "usbmass_bd",              nullptr                }, nullptr,  0      },
     { "ps2kbd",       { "PS2 USB keyboard driver", nullptr                }, nullptr,  0      },
     { "libsd",        { "freesd",                  "Sound_Device_Library" }, nullptr,  0      },
@@ -218,7 +222,8 @@ struct ResidentModule
 // The IOP's module list as last read, plus each module started since.
 static ResidentModule s_resident[kMaxResident];
 static int  s_numResident    = 0;
-static bool s_iomanxResident = false; // iomanX has no name to look for; see ModuleIdentity
+// Per kModuleIdentities entry, whether its export library is registered (see ModuleIdentity).
+static bool s_libraryResident[ArrayLength(kModuleIdentities)] = {};
 
 // Copies a module's name out of IOP memory. The buffer is a SIF DMA target: aligned to, and as
 // large as, a cache line, so no neighbour's dirty line can be written back over the transfer.
@@ -242,7 +247,7 @@ void ReadModuleName(const smod_mod_info_t & info, char (&name)[kMaxModuleNameLen
     }
 }
 
-// Reads the IOP's module list, and looks for iomanX's export library.
+// Reads the IOP's module list, and looks for the export libraries kModuleIdentities names.
 void TakeInventory()
 {
     s_numResident = 0;
@@ -263,7 +268,17 @@ void TakeInventory()
     }
 
     // slib caches where the IOP keeps its library list: read it afresh, the IOP may have been reset.
-    s_iomanxResident = (slib_exp_lib_list() != nullptr) && (slib_get_exp_lib("iomanx", nullptr) > 0);
+    const bool haveLibraryList = (slib_exp_lib_list() != nullptr);
+    for (int i = 0; i < ArrayLength(kModuleIdentities); ++i)
+    {
+        const char * const library = kModuleIdentities[i].library;
+        s_libraryResident[i] = haveLibraryList && (library != nullptr) && (slib_get_exp_lib(library, nullptr) > 0);
+    }
+}
+
+int IdentityIndex(const ModuleIdentity & identity)
+{
+    return static_cast<int>(&identity - kModuleIdentities);
 }
 
 const ResidentModule * FindResidentByName(const char * name)
@@ -278,7 +293,7 @@ const ResidentModule * FindResidentByName(const char * name)
     return nullptr;
 }
 
-// The running module doing a job, or null - for iomanX too, which has no entry to return.
+// The running module doing a job by its name, or null - also for one known only by its library.
 const ResidentModule * FindResident(const ModuleIdentity & identity)
 {
     for (const char * name : identity.names)
@@ -296,7 +311,7 @@ const ResidentModule * FindResident(const ModuleIdentity & identity)
 
 bool IsResident(const ModuleIdentity & identity)
 {
-    return (identity.library != nullptr) ? s_iomanxResident : (FindResident(identity) != nullptr);
+    return s_libraryResident[IdentityIndex(identity)] || (FindResident(identity) != nullptr);
 }
 
 // Records a module the boot started, so that a later request for the same job finds it running.
@@ -304,10 +319,9 @@ void NoteStarted(const ModuleIdentity & identity)
 {
     if (identity.library != nullptr)
     {
-        s_iomanxResident = true;
-        return;
+        s_libraryResident[IdentityIndex(identity)] = true;
     }
-    if (s_numResident < kMaxResident)
+    if (identity.names[0] != nullptr && s_numResident < kMaxResident)
     {
         ResidentModule & module = s_resident[s_numResident++];
         std::snprintf(module.name, sizeof(module.name), "%s", identity.names[0]);
@@ -329,11 +343,25 @@ const char * DescribeVersion(const ResidentModule & module, char (&text)[24])
     return text;
 }
 
+// Says which running module a driver that starts after the boot is using instead of its own.
+void PrintReused(const char * label, const ModuleIdentity & identity)
+{
+    if (const ResidentModule * running = FindResident(identity))
+    {
+        char version[24];
+        Com_Printf("IOP module '%s': using the %s already running (%s).\n", label, running->name, DescribeVersion(*running, version));
+    }
+    else
+    {
+        Com_Printf("IOP module '%s': using the one already running (its '%s' library is registered).\n", label, identity.library);
+    }
+}
+
 // ------------------------------------------------------------------------------------------------
 // The boot report (see PrintIopBootReport)
 // ------------------------------------------------------------------------------------------------
 
-constexpr int kReportBytes = 3072;
+constexpr int kReportBytes = 6144;
 static char s_report[kReportBytes];
 static int  s_reportUsed = 0;
 
@@ -376,6 +404,42 @@ void ListAppend(char * list, const size_t listBytes, const char * format, ...)
         std::vsnprintf(list + used, listBytes - used, format, args);
         va_end(args);
     }
+}
+
+// Lists every module running, a few to a line, and the export libraries kModuleIdentities looks
+// for that are registered. On a console the report is the only record of what a launcher left.
+void ReportResidentModules()
+{
+    constexpr int kLineChars = 100;
+    char line[kLineChars + 48] = {};
+    int  used = 0;
+    for (int i = 0; i < s_numResident; ++i)
+    {
+        const ResidentModule & module = s_resident[i];
+        char entry[48];
+        const int length = std::snprintf(entry, sizeof(entry), "%s %d.%d", (module.name[0] != '\0') ? module.name : "(unnamed)",
+                                         VersionMajor(module.version), VersionMinor(module.version));
+        if (used > 0 && used + 2 + length > kLineChars)
+        {
+            ReportLine("running: %s", line);
+            used = 0;
+        }
+        used += std::snprintf(&line[used], sizeof(line) - static_cast<size_t>(used), "%s%s", (used > 0) ? ", " : "", entry);
+    }
+    if (used > 0)
+    {
+        ReportLine("running: %s", line);
+    }
+
+    char libraries[160] = {};
+    for (int i = 0; i < ArrayLength(kModuleIdentities); ++i)
+    {
+        if (s_libraryResident[i])
+        {
+            ListAppend(libraries, sizeof(libraries), " %s", kModuleIdentities[i].library);
+        }
+    }
+    ReportLine("libraries registered:%s.", (libraries[0] != '\0') ? libraries : " none of those looked for");
 }
 
 void ReportModules()
@@ -438,6 +502,13 @@ static char s_usbBasePath[kMaxBasePathLen + 1];
 static char s_hddBasePath[kMaxBasePathLen + 1];
 static const char * s_hddSyncDevice = nullptr; // Only the selected, surviving HDD mount.
 static const char * s_hddStatus = "not checked";
+
+// What the HDD probe cost: the PFS partitions it mounted, and the time spent in them.
+static int s_hddMounts     = 0;
+static int s_hddMountsMsec = 0;
+
+// Set for an ELF launched from USB, whose boot leaves the HDD alone (see UsbLaunchPath).
+static bool s_launchedFromUsb = false;
 
 // How long to wait for the USB drive: enumeration + FAT mount happen
 // asynchronously after usbmass_bd starts, and a drive that has to spin up
@@ -609,6 +680,20 @@ bool ElfFolderFromPath(const char * elfPath, char (&folder)[kMaxElfFolderLen + 1
 
     folder[length] = '\0';
     return true;
+}
+
+// Whether the loader launched the ELF from USB: "mass:" or "mass0:" to "mass9:". Such a boot looks
+// for the game data on USB only. Searching the HDD first cost a console with its HDD attached
+// (2026-10-12, wLaunchELF 4.43a) 24.6 s of mounting PFS partitions, plus 3.4 s to start ps2hdd
+// when the launcher hadn't, before the USB drive was even looked at.
+bool UsbLaunchPath(const char * elfPath)
+{
+    if (elfPath == nullptr || std::strncmp(elfPath, "mass", 4) != 0)
+    {
+        return false;
+    }
+    const char next = elfPath[4];
+    return (next == ':') || (next >= '0' && next <= '9' && elfPath[5] == ':');
 }
 
 // Tries a folder ("" for the root) on every USB volume. Returns the base path that has the
@@ -925,10 +1010,9 @@ bool LoadRomModuleOnce(const char * path)
 
     bool loaded = false;
     const ModuleIdentity & identity = IdentityOf(path);
-    if (const ResidentModule * running = FindResident(identity))
+    if (IsResident(identity))
     {
-        char version[24];
-        Com_Printf("IOP module '%s': using the %s already running (%s).\n", path, running->name, DescribeVersion(*running, version));
+        PrintReused(path, identity);
         loaded = true;
     }
     else
@@ -962,10 +1046,9 @@ bool LoadRomModuleOnce(const char * path)
 bool StartLaterModule(const IrxModule & module)
 {
     const ModuleIdentity & identity = IdentityOf(module.label);
-    if (const ResidentModule * running = FindResident(identity))
+    if (IsResident(identity))
     {
-        char version[24];
-        Com_Printf("IOP module '%s': using the %s already running (%s).\n", module.label, running->name, DescribeVersion(*running, version));
+        PrintReused(module.label, identity);
         return true;
     }
 
@@ -1056,15 +1139,23 @@ bool BringUpKeyboardDriver()
 
 const char * ProbeHddPartition(const char * partition, const char * folder)
 {
+    const int startMsec = Sys_Milliseconds();
     if (fileXioMount(kHddMountPath, partition, kMountReadWrite) < 0)
     {
+        s_hddMountsMsec += Sys_Milliseconds() - startMsec;
         return nullptr;
     }
+    ++s_hddMounts;
 
     std::snprintf(s_hddBasePath, sizeof(s_hddBasePath), "%s%s", kHddMountPath, folder);
-    if (!HasGameData(s_hddBasePath))
+    const bool found = HasGameData(s_hddBasePath);
+    if (!found)
     {
         fileXioUmount(kHddMountPath);
+    }
+    s_hddMountsMsec += Sys_Milliseconds() - startMsec;
+    if (!found)
+    {
         return nullptr;
     }
 
@@ -1113,8 +1204,9 @@ const char * FindHddGameData(const char * preferredPartition, const char * folde
 
     // Prefer the launch partition, then all other main PFS partitions. This also
     // handles launchers that only pass pfsN:, and makes HDD beat USB when both
-    // hold a matching copy. Search the folder on every partition before roots,
-    // as on USB. APA subpartitions belong to their main partition.
+    // hold a matching copy, for an ELF not launched from USB (which never gets
+    // here). Search the folder on every partition before roots, as on USB. APA
+    // subpartitions belong to their main partition.
     const char * folders[] = { folder, "" };
     const int numFolders = (folder[0] != '\0') ? 2 : 1;
     for (int folderIndex = 0; folderIndex < numFolders; ++folderIndex)
@@ -1223,11 +1315,24 @@ const char * BringUpStorage(const char * preferredPartition, const bool afterRes
         return nullptr;
     }
 
-    const int hddStartMsec = Sys_Milliseconds();
-    const char * hddBasePath = FindHddGameData(preferredPartition, s_elfFolder);
-    ReportModules();
-    ReportLine("HDD: %s, after %d ms.", (hddBasePath != nullptr) ? "game data found" : s_hddStatus,
-               Sys_Milliseconds() - hddStartMsec);
+    const char * hddBasePath = nullptr;
+    if (s_launchedFromUsb)
+    {
+        s_hddStatus = "not searched (launched from USB)";
+        ReportModules();
+        ReportLine("HDD: not searched, the ELF was launched from USB.");
+    }
+    else
+    {
+        const int hddStartMsec = Sys_Milliseconds();
+        s_hddMounts     = 0;
+        s_hddMountsMsec = 0;
+        hddBasePath = FindHddGameData(preferredPartition, s_elfFolder);
+        ReportModules();
+        ReportLine("HDD: %s, after %d ms; %d PFS partition mounts took %d ms of it.",
+                   (hddBasePath != nullptr) ? "game data found" : s_hddStatus, Sys_Milliseconds() - hddStartMsec,
+                   s_hddMounts, s_hddMountsMsec);
+    }
     if (hddBasePath != nullptr)
     {
         SetFileXioBuffer();
@@ -1317,6 +1422,7 @@ const char * DetectBasePathAndBootIop(const char * elfPath)
 
     char preferredPartition[kMaxHddPartitionPathLen + 1];
     HddPartitionFromPath(elfPath, preferredPartition);
+    s_launchedFromUsb = UsbLaunchPath(elfPath);
 
     // Save the launch directory/partition before a reset discards all loader mounts.
     char searched[MAX_OSPATH];
@@ -1334,13 +1440,14 @@ const char * DetectBasePathAndBootIop(const char * elfPath)
     }
 
     const char * const launchedAs = (elfPath != nullptr && elfPath[0] != '\0') ? elfPath : "(no path from the loader)";
-    std::printf("IOP boot: no host: game data; looking for HDD, then USB...\n");
-    std::printf("IOP boot: launched as '%s'; looking for %s.\n", launchedAs, searched);
+    std::printf("IOP boot: no host: game data; looking %s...\n", s_launchedFromUsb ? "on USB, the launch device" : "for HDD, then USB");
+    ReportLine("launched as '%s'; looking for %s.", launchedAs, searched);
 
     const ResidentModule * loadfile = FindResidentByName(kLoadfileName);
     ReportLine("%d modules running at %d ms, LOADFILE %d.%d.", numAtStart, Sys_Milliseconds(),
                (loadfile != nullptr) ? VersionMajor(loadfile->version) : 0,
                (loadfile != nullptr) ? VersionMinor(loadfile->version) : 0);
+    ReportResidentModules();
 
     const char * resetReason = PS2_QUAKE_ALWAYS_RESET_IOP ? "PS2_QUAKE_ALWAYS_RESET_IOP is set" : FindResidentConflict();
     if (resetReason == nullptr && !PatchModuleLoader())

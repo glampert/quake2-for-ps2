@@ -125,8 +125,9 @@ The debug page was tested this way (2026-10-12), fired from the `CDAudio_Play` h
   so use a writable raw disk image; an MBR/FAT32 layout is a conservative test choice.
   Put `baseq2/` at its root for a directly launched host ELF. Disable `[EmuCore] HostFs`
   or launch from a folder without host game data, since the successful host probe skips
-  storage bring-up. Also disable HDD if it has a matching installation: HDD takes
-  precedence over USB. The embedded BDM modules probe `mass0:` through `mass9:`.
+  storage bring-up. A directly launched ELF (a host path) searches the HDD first, so
+  also disable HDD if it has a matching installation; one launched from `mass:` never
+  searches it. The embedded BDM modules probe `mass0:` through `mass9:`.
   Attaching the image doesn't launch its ELF; loading the ELF itself from `mass:` needs
   a homebrew launcher such as wLaunchELF. See PCSX2's
   [usb-msd.cpp](https://github.com/PCSX2/pcsx2/blob/master/pcsx2/USB/usb-msd/usb-msd.cpp)
@@ -167,7 +168,7 @@ The debug page was tested this way (2026-10-12), fired from the `CDAudio_Play` h
   paths retain the launch partition; bare `pfsN:` paths fall back to enumeration.
   The launch partition's folder/root comes first; other main PFS partitions are searched
   for the same folder before any roots. Missing HDD/drivers or no matching data falls
-  through to USB. The user verified emulated PFS boot/reads on 2026-10-07 and observed
+  through to USB. An ELF launched from `mass:` skips the HDD altogether (since 2026-10-12). The user verified emulated PFS boot/reads on 2026-10-07 and observed
   noticeably faster loading than USB. The missing HDD log still needs session-specific
   verification after adding HDD-only `fileXioSync` after log closes; see the PFS
   metadata-flush trap in [ps2-platform.md](ps2-platform.md). Builds from ed03e18 up to the

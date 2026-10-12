@@ -25,7 +25,8 @@ namespace ps2::sys {
 // show no game data through the launcher's drivers, or when too little IOP memory is left
 // for the drivers that load later. -DPS2_QUAKE_ALWAYS_RESET_IOP=1 resets every time, as
 // boots used to.
-// HDD comes next: optional DEV9/ATA/APA/PFS modules, the ELF's launch partition first,
+// HDD comes next, unless the ELF was launched from USB (mass:), whose boot leaves the HDD
+// alone: optional DEV9/ATA/APA/PFS modules, the ELF's launch partition first,
 // then other main PFS partitions. Within the launch partition, its folder precedes
 // its root; other partitions' folders are all searched before their roots. If HDD
 // misses, starts USB/BDM and waits up to 10 seconds, searching the ELF folder on all

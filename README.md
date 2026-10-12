@@ -331,11 +331,15 @@ loaded otherwise. So a USB drive the launcher had already mounted is read straig
 IOP is reset first, as every boot used to, only when something running can't work alongside
 the game's drivers; and the boot falls back to that reset when a driver won't start, when no
 game data turns up through the launcher's drivers, or when too little IOP memory is left.
-`-DPS2_QUAKE_ALWAYS_RESET_IOP=1` resets every time. It looks on the HDD and, if no HDD has the
-data, on USB. The `IOP boot:` lines in the console and in `quake2.log` say what it reused,
-loaded or reset, and when each step finished.
-**A copy on the HDD wins even when the ELF was launched from USB**, so to run from USB on a
-console whose HDD also has the game, move the HDD copy out of its folder first. Once the
+`-DPS2_QUAKE_ALWAYS_RESET_IOP=1` resets every time. **An ELF launched from USB (`mass:`) looks
+for its data on USB only** and leaves the HDD alone: on a console with its HDD attached,
+searching the HDD's partitions first took 25 s. Launched from anywhere else, it looks on the
+HDD and, if no HDD has the data, on USB, so there a copy on the HDD wins. On the HDD, mounting
+the game's partition takes seconds (4 s for the 7.3 GB one tested): its name is found by walking
+the APA partition chain from the start of the disk, one header read per partition ahead of it,
+and the mount then reads the partition's whole free-space bitmap, which grows with its size. The `IOP boot:` lines
+in the console and in `quake2.log` say what the launcher left running, what the boot reused,
+loaded or reset, and when each step finished. Once the
 drive is found, boot gives fileXio a 64 KB read buffer instead of its stock 16 KB (see
 [System and memory](#system-and-memory)).
 
