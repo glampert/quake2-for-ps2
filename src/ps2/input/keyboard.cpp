@@ -1,6 +1,6 @@
 /* ================================================================================================
  * File: keyboard.cpp
- * Brief: Keyboard implementation - IOP driver bring-up, per-frame polling and the
+ * Brief: Keyboard implementation - libkbd bring-up, per-frame polling and the
  *        USB HID scan code -> Quake key translation. See keyboard.h for the interface.
  *
  *  The driver is read in raw mode: instead of pre-cooked ASCII it hands back the USB
@@ -28,16 +28,6 @@ extern "C" {
 // exports it but declares it nowhere.
 int Key_StringToKeynum(const char * str);
 } // extern "C"
-
-// IRX module images embedded by the Makefile's bin2c rule (IRX_FILES). usbd is
-// shared with the USB mass-storage stack in iop_boot.cpp and only started here
-// when that stack didn't already do it.
-extern "C" {
-extern unsigned char usbd_irx[];
-extern unsigned int  size_usbd_irx;
-extern unsigned char ps2kbd_irx[];
-extern unsigned int  size_ps2kbd_irx;
-}
 
 namespace ps2::input {
 namespace {
@@ -203,20 +193,9 @@ bool Keyboard::Init()
     s_traceKeys = Cvar_Get("in_keyboarddebug", "0", 0);
     Cmd_AddCommand("in_keyboardmap", KeyboardMapCmd);
 
-    // The keyboard driver lives on the IOP and speaks USB, so it needs usbd under
-    // it. The USB boot path already started usbd; host: and HDD boots didn't,
-    // so start it here. Either way a driver that won't come up
-    // only costs us the keyboard, so none of this is fatal.
-    if (!ps2::sys::UsbStackStarted())
-    {
-        if (!ps2::sys::StartIopModuleFromBuffer("usbd", usbd_irx, size_usbd_irx))
-        {
-            Com_Printf("WARNING: keyboard disabled!\n");
-            return false;
-        }
-    }
-
-    if (!ps2::sys::StartIopModuleFromBuffer("ps2kbd", ps2kbd_irx, size_ps2kbd_irx))
+    // The keyboard driver lives on the IOP, over usbd (iop_boot.cpp). One that won't
+    // come up only costs us the keyboard, so none of this is fatal.
+    if (!ps2::sys::StartKeyboardDriver())
     {
         Com_Printf("WARNING: keyboard disabled!\n");
         return false;

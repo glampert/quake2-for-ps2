@@ -71,8 +71,45 @@ paths:
 
 - Boot (`system/iop_boot.cpp`): the `host:` fast path doesn't reset the IOP.
   `sbv_patch_enable_lmb()` alone lets `SifExecModuleBuffer` load embedded IRX without
-  disturbing open `host:` handles. Console storage shares a full IOP reset, sbv patches and
-  iomanX/fileXio. Boot probes host, then HDD/PFS, then USB/BDM before `Qcommon_Init`.
+  disturbing open `host:` handles. **Console boots take the IOP as the launcher left it**
+  (since 2026-10-12): the module list says what runs, each module the game needs is reused
+  when one doing its job is there (`kModuleIdentities`), and the rest is loaded. The IOP is
+  reset first only for a known conflict (`FindResidentConflict`), and as the fallback when a
+  module won't start, when no game data turns up through the launcher's drivers, or when the
+  largest free IOP block is under 384 KB. Boot probes host, then HDD/PFS, then USB before
+  `Qcommon_Init`. `-DPS2_QUAKE_ALWAYS_RESET_IOP=1` brings back a reset on every boot.
+- **What launchers leave on the IOP** (their sources, read 2026-10-12). wLaunchELF before
+  2026-05-26, the 2019 release included, resets the IOP only for an ELF on `hdd0:`. For
+  `mass:`/`mc:` it leaves iomanX, fileXio (with a 128 KB buffer), the ROM's SIO2MAN and PADMAN
+  (ports closed), ps2sdk's `mcman-old`/`mcserv-old` (`mcman_cex` 2.11, `mcserv` 2.8), cdfs,
+  usbd and BDM (usbhdfsd before 2022), and the keyboard, HDD and network drivers if it used
+  them. Since then it launches through ps2sdk's elf-loader2, which resets and loads the ROM's
+  SIO2MAN, MCMAN and MCSERV. A `LoadExecPS2` launch gets EELOAD's set, with XLOADFILE
+  (LOADFILE 2.1).
+- **Telling modules apart:** `smod_get_next_mod`, plus the name read by SIF DMA, gives each
+  module's IRX_ID name and version. The ROM's SIO2MAN, PADMAN, MCMAN and MCSERV are 1.x
+  (`padman` 1.20); the X modules and ps2sdk's are 2.x or 3.x (`sio2man` 3.17, `padman` 3.6).
+  ps2sdk's iomanX has no IRX_ID, so it lists unnamed: find it by its export library,
+  `slib_get_exp_lib("iomanx")` after `slib_exp_lib_list()`. `smod_get_mod_by_name` and
+  `slib_get_exp_lib` both match a prefix.
+- **`sbv_patch_enable_lmb()` returns 1 without patching** for a ROM LOADFILE already patched,
+  and for any LOADFILE it doesn't recognise (2.x has the RPC natively). An LMB call to a
+  LOADFILE without the RPC hands back the request buffer, which reads as a module started. So
+  after a 1, the boot checks the next module it loads from a buffer shows up in the list.
+- **libpad and libmc find the server themselves:** `padInit` binds the old or the new PADMAN
+  RPC, whichever exists, and `mcInit` ignores its type and tries XMCSERV's init first.
+  ps2sdk's mcserv answers both command sets. So a resident pad or card driver of either
+  generation can be reused, while loading the ROM's next to it can't work: its library or RPC
+  server is taken. The ROM's PADMAN and MCMAN link only against SIO2MAN 1.x.
+- **A pad port a launcher left open keeps being written:** PADMAN DMAs the port's state into
+  the EE buffer it was opened with, every field. In PCSX2 a test launcher's buffer landed in
+  the game's `.text`, and changed 6 times in 100 ms until the boot closed the port
+  (`StartPadDriver`, 2026-10-12). What lands before that can't be undone, and an IOP reset has
+  the same window. LaunchELF closes its ports before launching.
+- **IOP memory for the later drivers:** sound, the ROM's pad and card drivers and the keyboard
+  took 312 KB of the largest free IOP block in PCSX2 (1220 KB to 908 KB, the music playing
+  too; 2026-10-12). No RPC reports free IOP memory; `LargestFreeIopBlockBytes()` halves its way
+  there with `SifAllocIopHeap`, for the boot report and `ps2_dump_iop_mods`.
 - **HDD drivers and limits:** standard `ps2hdd.irx` already uses iomanX; the separately named
   `ps2hdd-iomanx.irx` is a virtual-disk variant without DEV9/ATAD. Use ps2dev9 → ps2atad →
   ps2hdd → ps2fs. Missing hardware/failed HDD init must fall through to USB. **Don't skip
@@ -102,9 +139,13 @@ paths:
   failure keeps a null buffer and the new size (fileXio_iop.c), so every later read would
   DMA from IOP address 0. On a nonzero result, set the stock 16 KB again (`SetFileXioBuffer`
   in iop_boot.cpp). Read sizes per layer are in [performance.md](performance.md).
-- **USB presence is not module-loader readiness.** HDD success has reset/patched the IOP
-  without starting usbd. Track those separately so keyboard startup starts usbd exactly
-  when required, without repatching the already-prepared module loader.
+- **All IOP module loading and every sbv patch live in `system/iop_boot.cpp`.** Subsystems ask
+  for a driver (`StartPadDriver`, `StartMemoryCardDriver`, `StartSoundDriver`,
+  `StartKeyboardDriver`) and set up only their EE library; keep new drivers that way. Each
+  driver is brought up once, and each module in it reuses a running one that does the job, the
+  boot's or the launcher's, so the keyboard asks for usbd whatever the boot started.
+  Module-loader readiness is separate: only the host: path reaches its first buffer load
+  without the sbv patches.
 - **`mass:` is `mass0:`.** iomanX's `parsefile` reads a missing unit number as 0, and libcglue
   passes both spellings through unchanged. bdmfs_fatfs serves the N-th FAT/exFAT volume it
   mounted as `massN:` (N < 10, FatFs `FF_VOLUMES`): one volume per partition, in mount order,
@@ -131,9 +172,10 @@ paths:
   `ps2::sys::FileIoRemovePatched()` reports it). fio has no `rename()` (`ENOSYS`). The USB
   boot uses fileXio, which has neither problem.
 - The pad uses rom0 SIO2MAN + PADMAN, so cards use **rom0 MCMAN + MCSERV** (same family).
-  ps2sdk's own mcman.irx needs its own sio2man and won't link. Load ROM modules through
-  `ps2::sys::LoadRomModuleOnce`, since SIO2MAN must not load twice. The same goes for any IRX:
-  keyboard and audio bring-ups are one-shot.
+  ps2sdk's own mcman.irx needs its own sio2man and won't link (its `mcman-old.irx`, which
+  wLaunchELF leaves running, does link against the ROM's). iop_boot's
+  `LoadRomModuleOnce` loads ROM modules, since SIO2MAN must not load twice; its driver
+  bring-ups are one-shot.
 - **A camera that turns on its own is the stick, not a stale poll.** padman reports a poll with
   no fresh data as `length` 0 (`padInit.c:353` in freepad, ps2sdk's padman, whose old-protocol
   build mirrors rom0:PADMAN; the ROM module itself is closed), so `padRead` returns 0 and

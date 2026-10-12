@@ -3,10 +3,11 @@
  * Brief: The memory card save Device. See memcard.h.
  *
  *  Drivers: the ROM's MCMAN and MCSERV, loaded on first use on top of the ROM's SIO2MAN - the
- *  pad driver (input/pad.cpp) runs the ROM's PADMAN over the same SIO2MAN, and the SDK's own
- *  mcman.irx would need the SDK's sio2man instead. Every model's ROM has these three, and libmc
- *  detects the older MCSERV protocol itself. It lacks rename and reports "unformatted" through
- *  mcGetInfo's result rather than its format flag; nothing here needs more.
+ *  pad driver runs the ROM's PADMAN over the same SIO2MAN, and the SDK's own mcman.irx would
+ *  need the SDK's sio2man instead (ps2::sys::StartMemoryCardDriver, iop_boot.cpp). Every
+ *  model's ROM has these three, and libmc detects the older MCSERV protocol itself. It lacks
+ *  rename and reports "unformatted" through mcGetInfo's result rather than its format flag;
+ *  nothing here needs more.
  *
  *  All file I/O goes through libmc rather than stdio on "mc0:" paths: the latter reaches the
  *  card through ROM FILEIO on host: boots and fileXio on HDD/USB boots, each with
@@ -292,9 +293,7 @@ private:
         if (!m_driverTried)
         {
             m_driverTried = true;
-            m_driverStarted = ps2::sys::LoadRomModuleOnce("rom0:SIO2MAN") &&
-                              ps2::sys::LoadRomModuleOnce("rom0:MCMAN")   &&
-                              ps2::sys::LoadRomModuleOnce("rom0:MCSERV");
+            m_driverStarted = ps2::sys::StartMemoryCardDriver();
 
             if (m_driverStarted)
             {

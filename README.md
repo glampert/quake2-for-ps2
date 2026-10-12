@@ -212,11 +212,13 @@ and is simply copied into place):
   SPU2 ADPCM), and `musenc -d` decodes one back to `.wav` for listening. It shares the
   decoder with the game ([spu_adpcm.h](src/ps2/audio/spu_adpcm.h)), so the SNR it reports is
   of exactly what the console plays.
-- `build/tools/imgdump` — dumps `.pcx` images into C++ byte arrays (RGB or raw 8-bit
-  palettized), which is how the built-in console font, console background, HUD backtile and
-  the global palette under [src/ps2/builtin/](src/ps2/builtin/) were generated. Those are
-  compiled into the ELF so the executable can boot and print errors before any game data
-  is found.
+- `build/tools/imgdump` — dumps `.pcx` images into C++ byte arrays
+  (`imgdump [--format pal|rgba32|rgb16] [--palette colormap.pcx] [--out dir] image.pcx...`):
+  the 8-bit palette indices as they are by default, or expanded to RGBA32 or RGB16. `--palette`
+  also writes that palette out as the global one. It made the built-in console font, console
+  background, HUD backtile, id logo and global palette under [src/ps2/builtin/](src/ps2/builtin/),
+  which are compiled into the ELF so the executable can show its boot splash and print errors
+  before any game data is found.
 
 ## How to run
 
@@ -321,8 +323,17 @@ mass:/q2ps2_release_3.20/
 Play the release ELF; the debug one is slower and checks more. Storage, keyboard and sound
 drivers are all embedded in the ELF, so nothing else needs to be installed on the drive.
 
-At boot, `host:` fails instantly on a console. Boot then resets the IOP, applies the sbv
-patches and starts iomanX/fileXio, looks on the HDD and, if no HDD has the data, on USB.
+At boot the id logo comes up on black at once, and stays until the game draws its first frame.
+`host:` fails instantly on a console. Boot then takes the IOP as the launcher left it: each
+driver the game needs (iomanX/fileXio, the HDD's and USB's, and later the pad, memory card,
+sound and keyboard drivers) is reused when the launcher left one doing that job running, and
+loaded otherwise. So a USB drive the launcher had already mounted is read straight away. The
+IOP is reset first, as every boot used to, only when something running can't work alongside
+the game's drivers; and the boot falls back to that reset when a driver won't start, when no
+game data turns up through the launcher's drivers, or when too little IOP memory is left.
+`-DPS2_QUAKE_ALWAYS_RESET_IOP=1` resets every time. It looks on the HDD and, if no HDD has the
+data, on USB. The `IOP boot:` lines in the console and in `quake2.log` say what it reused,
+loaded or reset, and when each step finished.
 **A copy on the HDD wins even when the ELF was launched from USB**, so to run from USB on a
 console whose HDD also has the game, move the HDD copy out of its folder first. Once the
 drive is found, boot gives fileXio a 64 KB read buffer instead of its stock 16 KB (see
@@ -352,8 +363,7 @@ Boot loads the embedded DEV9/ATA/APA/PFS drivers. The partition and folder come 
 path the launcher passes (`argv[0]`), including `hdd0:+Q2PS2:pfs:/dir/quake2.elf` and
 `hdd0:/+Q2PS2/dir/quake2.elf`. The launch partition is checked first, its folder before its
 root. Other main PFS partitions are then searched, all matching folders before roots. This
-also handles a bare `pfsN:` launch path that no longer identifies its partition after the
-reset. The chosen partition stays mounted at `pfs0:` for all of the game's file I/O. A
+also handles a bare `pfsN:` launch path, which doesn't say which partition it was. The chosen partition stays mounted at `pfs0:` for all of the game's file I/O. A
 console without an HDD, or whose HDD drivers fail, goes on to USB.
 
 #### From USB
@@ -504,7 +514,7 @@ src/
     net/                          NET_* seam (loopback only)
     save/                         Sys_Save* seam: save working set, slot archives, memory card
     fs/                           compressed game packs (pakN.pkz) for the engine's file system
-    builtin/                      images baked into the ELF (font, palette, HUD tiles)
+    builtin/                      images baked into the ELF (font, palette, HUD tiles, id logo)
     debug/                        simple on-screen printing for fatal errors, stack trace, HW exception handling
     tests/                        standalone bring-up scenes and tests (test cube, cinematics,
                                   map cycle, save games, perf run)
@@ -537,6 +547,16 @@ of 5:5:5 colour, which `ps2_fb_dither` can smooth over. Depth is 16-bit either w
 requires colour and depth to share a page layout). What is left after the two framebuffers,
 the z-buffer and CLUTs — ~1.27 MB in the 16-bit configuration — becomes the
 streamed texture heap.
+
+**Boot splash** ([splash_screen.h](src/ps2/renderer/splash_screen.h)). First thing in `main()`,
+before any IOP driver comes up, the GS is set up the way `gs::Init` sets it up with the default
+video settings, and the id logo (`pics/m_main_logo.pcx`, built into the ELF) is drawn at four
+times its size on black, brightened by `kColorIntensity` (splash_screen.cpp), into what becomes
+the first framebuffer. So the logo stays up through
+the boot and `gs::Init`, until the game presents its first frame. When `ps2_video_mode`,
+`ps2_fb_height` or `ps2_fb_16bit` lay that framebuffer out differently, `gs::Init` starts it
+black instead, since it would read the logo's texels the wrong way. A splash that can't be drawn
+is skipped.
 
 **Frame structure.** `BeginFrame()` clears colour and depth; 2D and 3D then draw in any
 order; `EndFrame()` flushes, waits for vsync and flips. 2D primitives accumulate into a
@@ -631,8 +651,9 @@ The mixing is entirely id's portable code — `client/snd_dma.c`, `snd_mem.c`, `
 in the build unchanged. The backend ([ps2/audio/](src/ps2/audio/)) only implements the five
 `SNDDMA_*` entry points, exactly as `win32/snd_win.c` did:
 
-- [`AudsrvDevice`](src/ps2/audio/audsrv_device.h) owns the IOP-side bring-up (`libsd.irx` +
-  `audsrv.irx`, both embedded in the ELF) and the streaming session, exposing audsrv's queue
+- [`AudsrvDevice`](src/ps2/audio/audsrv_device.h) owns the streaming session over `audsrv.irx`
+  (loaded with `libsd.irx`, both embedded in the ELF, by
+  [iop_boot.cpp](src/ps2/system/iop_boot.cpp), like every IOP module), exposing audsrv's queue
   as "how many bytes fit right now" and "take these". The SPU2 is only reachable from the
   IOP — there is no EE-side mapping of its registers — so every mixed byte crosses SIF.
   Output is 16-bit stereo at 22050 Hz by default (`s_khz`; 11025 and 44100 also work),
@@ -735,11 +756,11 @@ menus, the console, pause, the loading plaque and demos. `in_rumble 0` (archived
 "gamepad rumble" in the Options menu) turns it off, and `in_rumbledebug 1` echoes each effect
 as it starts. The per-event tuning is in the tables at the top of rumble.cpp.
 
-**Keyboard.** [`Keyboard`](src/ps2/input/keyboard.h) starts `usbd.irx` + `ps2kbd.irx` on
-demand and reads the driver in raw scan-code mode, translating USB HID usages into Quake key
-events, so the stock `default.cfg` binds work as they do on a PC. It is gated by
-`in_keyboard` (a one-shot bring-up — the IOP modules must not be loaded twice; on by default
-in debug builds only), traced by `in_keyboarddebug 1`, and individual usages can be remapped
+**Keyboard.** [`Keyboard`](src/ps2/input/keyboard.h) has `usbd.irx` + `ps2kbd.irx` started
+on demand (`ps2::sys::StartKeyboardDriver`) and reads the driver in raw scan-code mode,
+translating USB HID usages into Quake key events, so the stock `default.cfg` binds work as they
+do on a PC. It is gated by `in_keyboard` (a one-shot bring-up; on by default in debug builds
+only), traced by `in_keyboarddebug 1`, and individual usages can be remapped
 at runtime with `in_keyboardmap <usage> <key>` since keyboards disagree on which usage a
 physical key sends. Every poll is a file read on the driver, and the driver can't say whether a
 keyboard is plugged in, so a keyboard is read every frame only while in use (a key in the last
@@ -792,9 +813,12 @@ mostly reads, so the changes are all about reading less, less often:
 ### System and memory
 
 [main.cpp](src/ps2/system/main.cpp) locates the game data (`host:` first, then HDD/PFS, then USB/BDM
-bring-up) *before* `Qcommon_Init`, because `FS_InitFilesystem` opens pak files during init
-while the pad driver loads its `rom0:` modules later — after the IOP reset, which is the
-required order. Once the drive is found, boot raises fileXio's IOP read buffer from 16 KB to
+bring-up) *before* `Qcommon_Init`, because `FS_InitFilesystem` opens pak files during init,
+while the drivers started later (pad, memory card, sound, keyboard) go on top of whatever IOP
+the boot settled on: the launcher's, or a reset one. [iop_boot.cpp](src/ps2/system/iop_boot.cpp)
+loads every IOP module and applies every sbv patch; the subsystems ask it for a driver
+(`ps2::sys::StartPadDriver`, `StartMemoryCardDriver`, `StartSoundDriver`,
+`StartKeyboardDriver`) and set up only their EE library. Once the drive is found, boot raises fileXio's IOP read buffer from 16 KB to
 64 KB (`PS2_QUAKE_FILEXIO_BUFFER_KB` in [iop_boot.cpp](src/ps2/system/iop_boot.cpp)): fileXio
 asks the drive for one buffer's worth at a time, so on an HDD this sets the transfer size.
 On USB, FatFs also stops each read at the end of a cluster, so a stick formatted with small
@@ -866,7 +890,7 @@ everything the console prints, plus `Sys_Error` and the reports printed on the w
 (the render pipeline dump, stack traces, the out-of-memory stats), to `quake2.log` next to
 `baseq2/`. That's
 `build/<config>/quake2.log` on `host:`, and the selected game-data folder on HDD/USB. It is the only
-log a console run leaves. Every line is stamped with the seconds since boot, and every write
+log a console run leaves. Every line is stamped with the seconds since `main()` began, and every write
 opens, appends and closes the file. On a FAT drive that close is the only flush: bdmfs_fatfs
 has no sync, so a log kept open could come back empty after a power cycle. A run that hangs or
 crashes still leaves its log up to the last line. On HDD, each close is followed by
@@ -987,7 +1011,9 @@ and 2 and resets VIF1, VU1 and the GIF, in libgs's `GsResetPath` order
 ([scr_print.cpp](src/ps2/debug/scr_print.cpp)). Otherwise a GIF still holding a path open could
 keep its own transfers out and leave a blank screen.
 
-**Commands:** `ps2_dump_iop_mods` lists the currently loaded IOP modules;
+**Commands:** `ps2_dump_iop_mods` prints the `IOP boot:` report again (so `ps2_logfile 1`
+then this puts it in `quake2.log` on a console), lists the currently loaded IOP modules and the
+largest block of IOP memory still free;
 `in_keyboardmap <usage> <key>` remaps a USB scan code; `ps2_saveinfo` lists the save working
 set (raw and deflated sizes) and the files on the save device.
 

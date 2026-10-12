@@ -84,16 +84,23 @@ int Sys_Milliseconds()
 
 void Sys_Init()
 {
-    // Nothing to do: IOP bring-up (reset + HDD/USB storage modules when
-    // needed) happens in main() via ps2::sys::DetectBasePathAndBootIop -
-    // FS_InitFilesystem runs before Sys_Init and already needs file IO - and
-    // the pad driver loads its rom0: modules later, at IN_Init.
+    // Nothing to do: IOP bring-up (the HDD/USB storage modules, and a reset
+    // only when needed) happens in main() via ps2::sys::DetectBasePathAndBootIop -
+    // FS_InitFilesystem runs before Sys_Init and already needs file IO - and the
+    // pad, memory card, sound and keyboard drivers start later, through iop_boot too.
     Com_Printf("------- Sys_Init (PS2) -------\n");
 
     ps2::debug::LogFileRegisterCvar();
 
+    // Printed now that ps2_logfile has its value from the config, so the boot shows up in the log
+    // of a release build too, and on the console.
+    ps2::sys::PrintIopBootReport(&Com_Printf);
+
+    // The boot report again, for a console log turned on after the boot (ps2_logfile 1).
     Cmd_AddCommand("ps2_dump_iop_mods", []() {
+        ps2::sys::PrintIopBootReport(&Com_Printf);
         ps2::sys::PrintLoadedIopModules(40, &Com_Printf);
+        Com_Printf("IOP memory: %d KB free in one block.\n", ps2::sys::LargestFreeIopBlockBytes() / 1024);
     });
 
     ps2::save::Init();

@@ -9,6 +9,7 @@
 #include "ps2/common.h"
 #include "ps2/system/iop_boot.h"
 #include "ps2/renderer/profile.h"
+#include "ps2/renderer/splash_screen.h"
 #include "ps2/debug/exception_handler.h"
 #include "ps2/debug/log_file.h"
 
@@ -26,6 +27,14 @@ int main(int argc, char ** argv)
     // ps2::heap::MemTag::ElfSys. Must happen before anything touches the heap, so that what the
     // tags add up to stays a faithful picture of the console's 32MB.
     ps2::heap::TagsAddSystemMem();
+
+    // Sys_Milliseconds counts from its first call. Made here, it puts every log line's stamp and
+    // the IOP boot report's times against the start of main(), the boot included.
+    Sys_Milliseconds();
+
+    // The id logo, on screen within milliseconds, while the IOP drivers come up and the game data
+    // is found, which can take seconds on a console. It stays up until the game's first frame.
+    ps2::splash::Show();
 
     // Locate the game data - host: first, HDD/PFS next, USB mass: last - before
     // Qcommon_Init runs FS_InitFilesystem. On HDD/USB it sits next to the ELF,

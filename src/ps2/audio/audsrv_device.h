@@ -68,8 +68,8 @@ public:
     bool Held() const { return m_held; }
 
 private:
-    // libsd.irx -> audsrv.irx -> audsrv_init(). One-shot: re-running any of it would
-    // fail the module load and leak the EE-side RPC thread audsrv_init() spawns.
+    // The IOP's sound driver (ps2::sys::StartSoundDriver), then audsrv_init(). One-shot:
+    // a second audsrv_init() would leak the EE-side RPC thread it spawns.
     static bool StartIopSide();
 
     // audsrv_set_format for the stream Init opened, which also resets audsrv's ring.

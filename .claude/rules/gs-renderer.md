@@ -9,6 +9,7 @@ The README's "Rendering" section is the architecture overview. The renderer file
 (refexport), `view.cpp` (world pass, BSP walk, frame pass order), `md2.cpp` (alias models),
 `sky.cpp`, `render_system.*` (`ps2::rs`: VIF1 chains, batches, `DrawTriangles`, `Submit`),
 `cmd_buffer.*`, `gs.*` (GS front-end, register values, 2D), `vram.*` (texture heap),
+`splash_screen.*` (the boot splash, drawn before the renderer exists),
 `texture.*` (`ps2::tex`), `lightmap.*`, `scrap_atlas.*`, `clip.*` (EE sky clipper), `vu1.*`
 (VU memory layout, microprogram declarations).
 
@@ -27,6 +28,11 @@ The README's "Rendering" section is the architecture overview. The renderer file
   the level is up, so a slow load sat on a black screen. Draw such frames with
   `rs::EndFrame(/*deferPresent=*/false)`, as `PS2_DrawLoadingScreen` does. `rs::FrameStarted()`
   tells you whether a frame is already open.
+- **Framebuffer 0 is on screen from `gs::Init` until the first present** (the first frame is
+  drawn into frame 1), showing whatever VRAM holds there. The boot splash draws the id logo
+  into exactly the default layout of frame 0 (640 wide, the standard's full height, 16-bit, at
+  VRAM 0), so it stays up through `gs::Init` until then. For any other layout `gs::Init`
+  clears frame 0 (`splash::IsShownIn`), and it turns the output on only once that is drawn.
 - **No frame may begin while a `.bsp` is parsed.** Both command buffer halves live in the world
   loader's lump scratch, lent from `cmdbuf::DrainBeforeWorldLoad` until `BspFileReader::Close`
   (`cmdbuf::LentToWorldLoad()`). `LoadTexInfo` loads every wall texture inside that window, so

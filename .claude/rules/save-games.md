@@ -88,6 +88,12 @@ All policy lives in the backend. The engine only builds the text (`open_memstrea
   bytes of ECC), the superblock "Sony PS2 Memory Card Format", the FAT via `ifc_list`, and
   512-byte directory entries with the name at 0x40. An ~80-line Python reader can list and
   extract what the game wrote.
+- **`ps2_testsaves 2` fails two steps on a console boot, HEAD included** (PCSX2 booted from the
+  USB image, 2026-10-12, at HEAD fabcf80 and with the boot that takes the IOP as launched,
+  with the ROM's card drivers and with ps2sdk's): a console boot ignores
+  `ps2_savedevice host`, so slot 7 goes to the card. After the test's two level changes it
+  loads as "The save game is damaged", and "back to host files" then finds it invalid. Host
+  boots keep slot 7 on host files, which is why they pass. Not investigated yet.
 - Popups, menus and the icon need the user's eyes (no screenshots here).
 - Memory card and FILEIO traps (MCSERV, `mcInit`, IOP flags, `remove()`→`mkdir`) are in
   `ps2-platform.md`.

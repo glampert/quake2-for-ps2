@@ -11,9 +11,6 @@
 #include "ps2/system/iop_boot.h"
 #include "ps2/common.h"
 
-#include <sifrpc.h>
-#include <loadfile.h>
-
 namespace ps2::input {
 namespace {
 
@@ -45,21 +42,12 @@ bool GamePad::Connected(int state)
 
 bool GamePad::Init()
 {
-    // The pad driver lives on the IOP: bring up SIF RPC and load the ROM-resident
-    // serial + pad modules, then open connector 1. Connection and analog mode
-    // switching are asynchronous and polled per frame in Update().
-    // SIO2MAN is shared with the memory card driver (save/memcard.cpp), which loads the ROM's
-    // MCMAN/MCSERV - drivers of the same generation as the ROM's PADMAN - on top of it.
-    SifInitRpc(0);
-    if (!ps2::sys::LoadRomModuleOnce("rom0:SIO2MAN") ||
-        !ps2::sys::LoadRomModuleOnce("rom0:PADMAN"))
+    // The pad driver lives on the IOP: the boot code brings up the serial and pad modules
+    // and libpad (or finds them running), then this opens connector 1. Connection and
+    // analog mode switching are asynchronous and polled per frame in Update().
+    if (!ps2::sys::StartPadDriver())
     {
-        Com_Printf("WARNING: failed to load pad IOP modules - gamepad disabled!\n");
-        return false;
-    }
-    if (padInit(0) != 1)
-    {
-        Com_Printf("WARNING: padInit failed - gamepad disabled!\n");
+        Com_Printf("WARNING: no pad driver - gamepad disabled!\n");
         return false;
     }
     if (padPortOpen(kPadPort, kPadSlot, m_dmaArea) == 0)

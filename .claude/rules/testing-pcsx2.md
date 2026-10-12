@@ -74,9 +74,9 @@ Three traps. Each one looks like a game crash, and all of them reproduce at HEAD
   [performance.md](performance.md).
 - `ps2_testcube 1` (VU1 path smoke test), `ps2_testcin 1` (cinematics).
 - **The USB boot branch:** run a copy of the ELF from a directory with no `baseq2/` (e.g. the
-  scratchpad), with HDD disabled. The `host:` probe misses, so the IOP reset, optional HDD
-  probe, BDM module chain and 10 s `mass0:`-`mass9:` poll all run, ending on the
-  "No game data found!" screen with
+  scratchpad), with HDD disabled. The `host:` probe misses, so the IOP inventory (PCSX2's BIOS
+  leaves nothing in the way, so no reset), optional HDD probe, BDM module chain and 10 s
+  `mass0:`-`mass9:` poll all run, ending on the "No game data found!" screen with
   `USB volumes mounted: none` when no emulated USB drive is attached. The run stops before
   `Qcommon_Init` and never touches `config.cfg`. Its
   `argv[0]` is an absolute host path, longer than the 50-char ELF folder cap, so only the
@@ -123,8 +123,8 @@ Three traps. Each one looks like a game crash, and all of them reproduce at HEAD
   Enable `[DEV9/Hdd] HddEnable = true` and set `HddFile` to a PCSX2 HDD image. Create and
   format a new blank image with uLaunchELF's HDD Manager, create a main PFS partition
   (e.g. `+Q2PS2`, 512 MiB), and copy the new ELF and `baseq2/` side by side into it.
-  With `HostFs = false`, launch it through uLaunchELF. The game resets the IOP and mounts
-  PFS itself: the launcher mount does not survive. Successful bring-up logs
+  With `HostFs = false`, launch it through uLaunchELF. The game mounts PFS itself, first
+  unmounting whatever a launcher's PFS driver left at `pfs0:`. Successful bring-up logs
   `game data on pfs0:/.../baseq2 (HDD partition hdd0:+Q2PS2)` and keeps that mount alive.
   Canonical `hdd0:+Q2PS2:pfs:/dir/quake2.elf` and browser `hdd0:/+Q2PS2/dir/quake2.elf`
   paths retain the launch partition; bare `pfsN:` paths fall back to enumeration.
@@ -138,6 +138,23 @@ Three traps. Each one looks like a game crash, and all of them reproduce at HEAD
   `close() == 0`, and iomanX returns the slot number (see ps2-platform.md). The fix was
   verified on emulated USB (uLaunchELF, `mass:quake2_debug.elf`): a full 1349-line
   `quake2.log` from boot to quit, and no logging warning in emulog.
+- **Launcher states without a launcher** (2026-10-12): a small test ELF in the scratchpad brings
+  the IOP up as a launcher would, then starts `mass:/quake2_debug.elf` from the USB image with
+  libelf-loader's `LoadELFFromFileWithPartitionNoReset` (in `libelf-loader.a`, not declared in
+  its header; declare it by hand). It links `-lelf-loader -lpatches -lpad -lmc -lfileXio
+  -lkernel` with the IRXs from `$PS2SDK/iop/irx` embedded by `bin2c`, the way wLaunchELF's
+  `Reset()` loads them. Launched with `PCSX2 -batch -elf`, it runs from `host:`. Each state it
+  made, and what the game did:
+  - wLaunchELF 2022-2026/05 (its BDM stack, ROM SIO2MAN and PADMAN, `mcman-old`/`mcserv-old`):
+    no reset, every module reused, game data 44 ms after `main()` against 655 ms from a fresh
+    IOP.
+  - The same, with pad port 0 left open: its DMA rewrote the game's `.text` until the boot
+    closed the port (read through the uncached segment, 100 ms apart, before and after).
+  - The elf-loader with reset (wLaunchELF since 2026/05): the ROM's card drivers reused.
+  - wLaunchELF 2019 (`usbhdfsd`): the data read through it.
+  - ps2sdk's `sio2man` alone, and most of the IOP's memory taken: each reset, then booted.
+  Keep the launcher's `padArea` buffer and the ELF's address ranges in mind when reading a
+  probe: the launcher's addresses are the game's once it runs.
 - **Storage selection runtime harness:** include `iop_boot.cpp` with stub SDK headers
   and IOP/mount calls, then run from a directory holding folders literally named `pfs0:`,
   `mass0:`, `mass1:`... (macOS allows the colon). `fopen` then takes the probe paths as
@@ -179,6 +196,10 @@ draws), or `ps2_skip_entities 1` to drop every entity model from the draw.
   the log. Anything new printed on a fatal path must use it, not `printf`: the first hardware
   pipeline hang (2026-10-07) logged only `Sys_Error: Render pipeline hang: ... See the pipeline
   dump above.`, because the dump went to stdout alone.
+- **`quake2.log` stamps count from `main()`** (since 2026-10-12, `Sys_Milliseconds` is first
+  called there). Older console logs started counting at the boot's first USB poll, so their
+  first stamp (about 0.65 s) leaves out the IOP reset and the module loads. The `IOP boot:`
+  lines, printed at `Sys_Init`, give each boot step's time.
 - **A pipeline hang on a console used to end on a solid green screen**, with no `Sys_Error`
   text drawn, though the log had the `Sys_Error` line. `ScrInit` reset the GS, then its PATH3
   transfers couldn't get through a GIF still held by the wedged pipeline, so `DmaWaitGif`

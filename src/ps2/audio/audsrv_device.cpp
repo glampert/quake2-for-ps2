@@ -27,17 +27,6 @@
 
 #include <cstring>
 
-// IRX module images embedded by the Makefile's bin2c rule (IRX_FILES). libsd is
-// ps2sdk's open-source reimplementation of Sony's sound driver (freesd.irx is a
-// symlink to the same binary); audsrv imports its sceSd* entry points, so it has
-// to be running first.
-extern "C" {
-extern unsigned char libsd_irx[];
-extern unsigned int  size_libsd_irx;
-extern unsigned char audsrv_irx[];
-extern unsigned int  size_audsrv_irx;
-}
-
 namespace ps2::audio {
 namespace {
 
@@ -59,8 +48,7 @@ bool IsSilence(const u8 * const data, const int sizeBytes)
 }
 
 // Set once the IOP modules are up and audsrv_init() has bound the RPC channel.
-// The whole sequence is one-shot: SifExecModuleBuffer fails on an already resident
-// module, and a second audsrv_init() would leak the EE-side RPC thread it spawns.
+// A second audsrv_init() would leak the EE-side RPC thread it spawns.
 static bool s_iopStarted = false;
 
 } // namespace
@@ -72,12 +60,8 @@ bool AudsrvDevice::StartIopSide()
         return true;
     }
 
-    if (!ps2::sys::StartIopModuleFromBuffer("libsd", libsd_irx, size_libsd_irx))
-    {
-        return false;
-    }
-
-    if (!ps2::sys::StartIopModuleFromBuffer("audsrv", audsrv_irx, size_audsrv_irx))
+    // libsd and audsrv (iop_boot.cpp), loaded once, or the ones running already.
+    if (!ps2::sys::StartSoundDriver())
     {
         return false;
     }

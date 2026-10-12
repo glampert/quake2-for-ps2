@@ -799,17 +799,20 @@ void TextureCache::Init()
         // RGBA32 footprint in VRAM. conchars keeps RGBA components: its
         // transparent pixels are palette index 255 (alpha 0 in the CLUT),
         // which the alpha test cuts out. Only the generated debug
-        // checkerboards below stay RGB16.
-        { "pics/conchars.pcx",  conchars_data,         conchars_width,  conchars_height,  PixelFormat::Palette8, TexComponents::RGBA },
-        { "pics/conback.pcx",   conback_data,          conback_width,   conback_height,   PixelFormat::Palette8, TexComponents::RGB  },
-        { "pics/backtile.pcx",  backtile_data,         backtile_width,  backtile_height,  PixelFormat::Palette8, TexComponents::RGB  },
-        { "pics/debug0.pcx",    MakeCheckerPattern(0), kCheckerDim,     kCheckerDim,      PixelFormat::RGB16,    TexComponents::RGB  },
+        // checkerboards below stay RGB16. The id logo is in the ELF for the boot
+        // splash, so the main menu takes it from there too; its ragged corners cut
+        // out the way conchars' background does.
+        { "pics/conchars.pcx",    conchars_data,         conchars_width,    conchars_height,    PixelFormat::Palette8, TexComponents::RGBA },
+        { "pics/conback.pcx",     conback_data,          conback_width,     conback_height,     PixelFormat::Palette8, TexComponents::RGB  },
+        { "pics/backtile.pcx",    backtile_data,         backtile_width,    backtile_height,    PixelFormat::Palette8, TexComponents::RGB  },
+        { "pics/m_main_logo.pcx", m_main_logo_data,      m_main_logo_width, m_main_logo_height, PixelFormat::Palette8, TexComponents::RGBA },
+        { "pics/debug0.pcx",      MakeCheckerPattern(0), kCheckerDim,       kCheckerDim,        PixelFormat::RGB16,    TexComponents::RGB  },
 #if PS2_QUAKE_DEBUG // Extra debug textures for the textured cube test:
-        { "pics/debug1.pcx",    MakeCheckerPattern(1), kCheckerDim,     kCheckerDim,      PixelFormat::RGB16,    TexComponents::RGB  },
-        { "pics/debug2.pcx",    MakeCheckerPattern(2), kCheckerDim,     kCheckerDim,      PixelFormat::RGB16,    TexComponents::RGB  },
-        { "pics/debug3.pcx",    MakeCheckerPattern(3), kCheckerDim,     kCheckerDim,      PixelFormat::RGB16,    TexComponents::RGB  },
-        { "pics/debug4.pcx",    MakeCheckerPattern(4), kCheckerDim,     kCheckerDim,      PixelFormat::RGB16,    TexComponents::RGB  },
-        { "pics/debug5.pcx",    MakeCheckerPattern(5), kCheckerDim,     kCheckerDim,      PixelFormat::RGB16,    TexComponents::RGB  },
+        { "pics/debug1.pcx",      MakeCheckerPattern(1), kCheckerDim,       kCheckerDim,        PixelFormat::RGB16,    TexComponents::RGB  },
+        { "pics/debug2.pcx",      MakeCheckerPattern(2), kCheckerDim,       kCheckerDim,        PixelFormat::RGB16,    TexComponents::RGB  },
+        { "pics/debug3.pcx",      MakeCheckerPattern(3), kCheckerDim,       kCheckerDim,        PixelFormat::RGB16,    TexComponents::RGB  },
+        { "pics/debug4.pcx",      MakeCheckerPattern(4), kCheckerDim,       kCheckerDim,        PixelFormat::RGB16,    TexComponents::RGB  },
+        { "pics/debug5.pcx",      MakeCheckerPattern(5), kCheckerDim,       kCheckerDim,        PixelFormat::RGB16,    TexComponents::RGB  },
 #endif // PS2_QUAKE_DEBUG
     };
 

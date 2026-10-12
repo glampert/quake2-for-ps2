@@ -112,6 +112,7 @@ PS2_CXX_SRC =                         \
 	ps2/renderer/render_system.cpp    \
 	ps2/renderer/clip.cpp             \
 	ps2/renderer/loading_screen.cpp   \
+	ps2/renderer/splash_screen.cpp    \
 	ps2/tests/draw_cube.cpp           \
 	ps2/tests/cinematics.cpp          \
 	ps2/tests/map_cycle.cpp           \
@@ -128,7 +129,8 @@ PS2_CXX_SRC =                         \
 	ps2/builtin/palette.cpp           \
 	ps2/builtin/conchars.cpp          \
 	ps2/builtin/conback.cpp           \
-	ps2/builtin/backtile.cpp
+	ps2/builtin/backtile.cpp          \
+	ps2/builtin/m_main_logo.cpp
 
 # Doug Lea's allocator: vendored third-party C, left as C on purpose (see the
 # note at the top of dlmalloc.c). Everything else of ours is C++.
@@ -186,6 +188,7 @@ SIZE_OPT_CXX_SRC =                    \
 	ps2/input/rumble.cpp              \
 	ps2/renderer/vid.cpp              \
 	ps2/renderer/loading_screen.cpp   \
+	ps2/renderer/splash_screen.cpp    \
 	ps2/save/save_api.cpp             \
 	ps2/save/slot_archive.cpp         \
 	ps2/save/save_device.cpp          \

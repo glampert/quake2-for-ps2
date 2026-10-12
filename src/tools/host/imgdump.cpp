@@ -1,499 +1,516 @@
 /* ================================================================================================
  * File: imgdump.cpp
  * Created on: 26/10/15
- * Brief:
- *  Hardcoded command line tool that dumps PCX image files into
- *  C-style arrays of bytes, so that they can be easily embedded
- *  into a C++ program.
+ * Brief: Dumps PCX images into C++ byte arrays, to be compiled into the ELF. The built-ins under
+ *        src/ps2/builtin/ come from it: the console font and background, the HUD backtile, the id
+ *        logo the boot splash shows, and the global palette. They are there before any game data
+ *        has been found.
  *
- *  This tool is hardcoded to look for a few Quake2 textures in
- *  the CWD and dump them as arrays. These are then compiled into
- *  the PS2 executable to make it standalone. We only do that for
- *  basic texture like the conchars, the global palette and a couple
- *  others. Most of the code here was just copied from src/ps2/
+ *          imgdump [--format pal|rgba32|rgb16] [--palette <colormap.pcx>] [--out <dir>] <image.pcx>...
  *
- *  Usage: imgdump [rgb|pal] [images_path]
- *  "rgb" (default) unpalettizes the images; "pal" dumps the raw
- *  8-bit palette indices for the PS2's native CLUT texture path.
- *  'images_path' is where the source .pcx files are read from
- *  (default: the CWD); the .cpp files are written to the CWD.
+ *            --format F   pal (the default) keeps the 8-bit palette indices as they are: the PS2
+ *                         uploads them as PSMT8 textures sampling the global palette's CLUT.
+ *                         rgba32 and rgb16 expand them through a palette, into RGBA 8:8:8:8 or
+ *                         RGB 5:5:5:1 texels.
+ *            --palette P  a PCX whose palette is the global one (pics/colormap.pcx). It is written
+ *                         to palette.cpp as global_palette, and rgba32/rgb16 expand through it.
+ *                         Without it they use each image's own palette.
+ *            --out D      where the .cpp files go (default: the current directory).
+ *
+ *        Each <name>.pcx becomes <name>.cpp, defining <name>_width, <name>_height,
+ *        <name>_size_bytes and <name>_data, which builtin.h declares. Images are decoded the way
+ *        the game's own loader decodes them (renderer/image_load.cpp), so a built-in holds the
+ *        same pixels as the file it stands in for. To regenerate them all from an unpacked pak0:
+ *
+ *          imgdump --palette pics/colormap.pcx --out src/ps2/builtin pics/conchars.pcx \
+ *                  pics/conback.pcx pics/backtile.pcx pics/m_main_logo.pcx
  *
  * This source code is released under the GNU GPL v2 license.
  * Check the accompanying LICENSE file for details.
  * ================================================================================================ */
 
-#include <stdbool.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdarg.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
 
-typedef unsigned int   u32;
-typedef unsigned short u16;
-typedef unsigned char  byte;
-static u32 palette[256];
+namespace {
 
-// Selected by the command line: dump raw 8-bit palette indices (PS2 PSMT8,
-// colors come from the global palette CLUT at draw time) instead of
-// unpalettizing to RGB. Defaults to RGB.
-static bool g_palettized = false;
+// ------------------------------------------------------------------------------------------------
+// PCX
+// ------------------------------------------------------------------------------------------------
 
-// Directory the source .pcx images are read from (the generated .cpp files
-// still go to the CWD). Defaults to the CWD.
-static const char * g_images_path = ".";
+constexpr int          kPcxHeaderBytes   = 128;
+constexpr int          kPaletteEntries   = 256;
+constexpr int          kPcxPaletteBytes  = kPaletteEntries * 3;
+constexpr std::uint8_t kPcxPaletteMarker = 0x0C; // the byte ahead of a 256-colour palette
+constexpr int          kTransparentIndex = 255;  // Quake's see-through palette entry
 
-char * va(const char * format, ...)
+enum class Format
 {
-    enum
-    {
-        MAX_BUF_CHARS = 2048
-    };
+    Pal,
+    Rgba32,
+    Rgb16,
+};
 
-    // Multiple buffers, in case called by nested functions.
-    static int index = 0;
-    static char strings[4][MAX_BUF_CHARS];
+struct Image
+{
+    int width  = 0;
+    int height = 0;
+    std::vector<std::uint8_t> indices; // width * height palette indices, row by row
+    std::uint32_t palette[kPaletteEntries] = {}; // the file's own palette, 0xAABBGGRR
+};
 
-    char * bufptr = strings[index];
-    index = (index + 1) & 3;
-
-    va_list argptr;
-    va_start(argptr, format);
-    unsigned int charsWritten = vsnprintf(bufptr, MAX_BUF_CHARS, format, argptr);
-    va_end(argptr);
-
-    if (charsWritten >= MAX_BUF_CHARS)
-    {
-        charsWritten = MAX_BUF_CHARS - 1; // Truncate.
-    }
-
-    bufptr[charsWritten] = '\0'; // Ensure null terminated.
-    return bufptr;
+bool Fail(const char * format, const char * arg = "")
+{
+    std::fprintf(stderr, "imgdump: error: ");
+    std::fprintf(stderr, format, arg);
+    std::fprintf(stderr, "\n");
+    return false;
 }
 
-void Error(const char * msg)
+bool ReadWholeFile(const char * path, std::vector<std::uint8_t> & out)
 {
-    fprintf(stderr, "ERROR: %s\n", msg);
-    exit(EXIT_FAILURE);
+    std::FILE * file = std::fopen(path, "rb");
+    if (file == nullptr)
+    {
+        return Fail("cannot open '%s'", path);
+    }
+
+    bool ok = (std::fseek(file, 0, SEEK_END) == 0);
+    const long size = ok ? std::ftell(file) : -1;
+    ok = ok && size >= 0 && std::fseek(file, 0, SEEK_SET) == 0;
+    if (ok)
+    {
+        out.resize(static_cast<size_t>(size));
+        ok = (size == 0) || std::fread(out.data(), 1, out.size(), file) == out.size();
+    }
+    std::fclose(file);
+    return ok ? true : Fail("cannot read '%s'", path);
 }
 
-bool LoadBinaryFile(const char * filename, int * size_bytes, void ** data_ptr)
+int ReadU16(const std::uint8_t * bytes)
 {
-    FILE * fd;
-    int file_len;
-    int num_read;
-    void * file_data = NULL;
-    bool had_error = false;
-
-    fd = fopen(filename, "rb");
-    if (fd == NULL)
-    {
-        had_error = true;
-        goto BAIL;
-    }
-
-    fseek(fd, 0, SEEK_END);
-    file_len = ftell(fd);
-    if (file_len <= 0)
-    {
-        had_error = true;
-        goto BAIL;
-    }
-
-    rewind(fd);
-    file_data = malloc(file_len);
-    if (file_data == NULL)
-    {
-        had_error = true;
-        goto BAIL;
-    }
-
-    num_read = fread(file_data, 1, file_len, fd);
-    if (num_read != file_len)
-    {
-        had_error = true;
-        goto BAIL;
-    }
-
-BAIL:
-
-    if (fd != NULL)
-    {
-        fclose(fd);
-    }
-
-    if (had_error)
-    {
-        if (file_data != NULL)
-        {
-            free(file_data);
-            file_data = NULL;
-        }
-        file_len = 0;
-    }
-
-    *size_bytes = file_len;
-    *data_ptr   = file_data;
-    return !had_error;
+    return bytes[0] | (bytes[1] << 8);
 }
 
-typedef struct
+// Reads a PCX's header and palette, and its pixels too when 'pixels' is set. The same checks and
+// the same decoding as the game's LoadPcx: width and height from xmax/ymax, and RLE runs that
+// overshoot a row (its padding bytes) consumed without being stored.
+bool LoadPcx(const char * path, const bool pixels, Image & image)
 {
-    char manufacturer;
-    char version;
-    char encoding;
-    char bits_per_pixel;
-    unsigned short xmin, ymin, xmax, ymax;
-    unsigned short hres, vres;
-    unsigned char palette[48];
-    char reserved;
-    char color_planes;
-    unsigned short bytes_per_line;
-    unsigned short palette_type;
-    char filler[58];
-    unsigned char data; // unbounded
-} pcx_t;
-
-bool PCX_LoadFromMemory(const char * filename, const byte * data, int data_len,
-                        byte ** pic, u32 * palette, int * width, int * height)
-{
-    enum
+    std::vector<std::uint8_t> file;
+    if (!ReadWholeFile(path, file))
     {
-        PCX_PAL_SIZE_BYTES = 768
-    };
-
-    byte * pix;
-    int x, y;
-    int data_byte;
-    int run_length;
-
-    const pcx_t * pcx  = (const pcx_t *)data;
-    int manufacturer   = pcx->manufacturer;
-    int version        = pcx->version;
-    int encoding       = pcx->encoding;
-    int bits_per_pixel = pcx->bits_per_pixel;
-    int xmax           = pcx->xmax;
-    int ymax           = pcx->ymax;
-
-    // Validate the image:
-    if (manufacturer != 0x0A || version != 5 || encoding != 1 ||
-        bits_per_pixel != 8  || xmax >= 640  || ymax >= 480)
-    {
-        Error("Bad PCX file. Invalid header value(s)!");
         return false;
     }
-
-    // Get the palette:
-    if (palette != NULL)
+    if (file.size() < static_cast<size_t>(kPcxHeaderBytes + 1 + kPcxPaletteBytes))
     {
-        alignas(16) byte temp_pal[PCX_PAL_SIZE_BYTES];
-        memcpy(temp_pal, (const byte *)pcx + data_len - PCX_PAL_SIZE_BYTES, PCX_PAL_SIZE_BYTES);
-
-        // Adjust the palette and fix byte order if needed:
-        u32 c;
-        int i, r, g, b;
-        for (i = 0; i < 256; ++i)
-        {
-            r = temp_pal[(i * 3) + 0];
-            g = temp_pal[(i * 3) + 1];
-            b = temp_pal[(i * 3) + 2];
-            c = (255 << 24) + (r << 0) + (g << 8) + (b << 16);
-            palette[i] = c;
-        }
-        palette[255] &= 0xFFFFFF; // 255 is transparent
+        return Fail("'%s' is too short to be a PCX", path);
     }
 
-    if (width != NULL)
+    // manufacturer, version, encoding, bits per pixel, then xmin, ymin, xmax and ymax.
+    const std::uint8_t * header = file.data();
+    const int xmax = ReadU16(header + 8);
+    const int ymax = ReadU16(header + 10);
+    if (header[0] != 0x0A || header[1] != 5 || header[2] != 1 || header[3] != 8 || xmax >= 640 || ymax >= 480)
     {
-        *width = xmax + 1;
-    }
-    if (height != NULL)
-    {
-        *height = ymax + 1;
+        return Fail("'%s' is not an 8-bit PCX the game can load", path);
     }
 
-    if (pic == NULL)
+    const std::uint8_t * palette = file.data() + file.size() - kPcxPaletteBytes;
+    if (palette[-1] != kPcxPaletteMarker)
     {
-        // Caller just wanted the palette.
+        return Fail("'%s' has no 256-colour palette", path);
+    }
+    for (int i = 0; i < kPaletteEntries; ++i)
+    {
+        const std::uint32_t r = palette[(i * 3) + 0];
+        const std::uint32_t g = palette[(i * 3) + 1];
+        const std::uint32_t b = palette[(i * 3) + 2];
+        image.palette[i] = 0xFF000000u | (b << 16) | (g << 8) | r;
+    }
+    image.palette[kTransparentIndex] &= 0x00FFFFFFu;
+
+    image.width  = xmax + 1;
+    image.height = ymax + 1;
+    if (!pixels)
+    {
         return true;
     }
 
-    // Now alloc and read in the pixel data:
-    pix = (byte *)malloc((xmax + 1) * (ymax + 1));
-    *pic = pix;
-
-    // Skip the header:
-    data = &pcx->data;
-
-    // Decode the RLE packets:
-    for (y = 0; y <= ymax; y++, pix += xmax + 1)
+    image.indices.assign(static_cast<size_t>(image.width * image.height), 0);
+    const std::uint8_t * in  = file.data() + kPcxHeaderBytes;
+    const std::uint8_t * end = file.data() + file.size();
+    for (int y = 0; y < image.height; ++y)
     {
-        for (x = 0; x <= xmax;)
+        std::uint8_t * row = &image.indices[static_cast<size_t>(y * image.width)];
+        for (int x = 0; x < image.width;)
         {
-            data_byte = *data++;
-            if ((data_byte & 0xC0) == 0xC0)
+            if (in >= end)
             {
-                run_length = data_byte & 0x3F;
-                data_byte  = *data++;
-            }
-            else
-            {
-                run_length = 1;
+                return Fail("'%s' is malformed: its pixels end early", path);
             }
 
-            while (run_length-- > 0)
+            int dataByte  = *in++;
+            int runLength = 1;
+            if ((dataByte & 0xC0) == 0xC0)
             {
-                pix[x++] = data_byte;
+                runLength = dataByte & 0x3F;
+                if (in >= end)
+                {
+                    return Fail("'%s' is malformed: its pixels end early", path);
+                }
+                dataByte = *in++;
+            }
+
+            while (runLength-- > 0 && x < image.width)
+            {
+                row[x++] = static_cast<std::uint8_t>(dataByte);
             }
         }
     }
-
-    if ((data - (const byte *)pcx) > data_len)
-    {
-        Error("PCX image was malformed!");
-        free(*pic);
-        *pic = NULL;
-        return false;
-    }
-
     return true;
 }
 
-void Img_UnPalettize32(int width, int height, const byte * pic8in,
-                       const u32 * palette, byte * pic32out)
+// ------------------------------------------------------------------------------------------------
+// Expansion through a palette
+// ------------------------------------------------------------------------------------------------
+
+// RGBA 8:8:8:8 as the palette's own bytes. A transparent texel takes the colour of an opaque
+// neighbour, so bilinear filtering has no dark fringe to blend in at the edge of a cut-out.
+std::vector<std::uint8_t> ExpandRgba32(const Image & image, const std::uint32_t (&palette)[kPaletteEntries])
 {
-    int i, p;
-    const int pixel_count = width * height;
-    u32 * rgba = (u32 *)pic32out;
+    const int numTexels = image.width * image.height;
+    const int w = image.width;
+    const std::uint8_t * in = image.indices.data();
+    std::vector<std::uint8_t> out(static_cast<size_t>(numTexels) * 4);
 
-    for (i = 0; i < pixel_count; ++i)
+    for (int i = 0; i < numTexels; ++i)
     {
-        p = pic8in[i];
-        rgba[i] = palette[p];
+        std::uint32_t texel = palette[in[i]];
 
-        if (p == 255)
+        if (in[i] == kTransparentIndex)
         {
-            // Transparent, so scan around for another
-            // color to avoid alpha fringes
-            if (i > width && pic8in[i - width] != 255)
+            int neighbour = 0;
+            if (i > w && in[i - w] != kTransparentIndex)
             {
-                p = pic8in[i - width];
+                neighbour = in[i - w];
             }
-            else if (i < pixel_count - width && pic8in[i + width] != 255)
+            else if (i < numTexels - w && in[i + w] != kTransparentIndex)
             {
-                p = pic8in[i + width];
+                neighbour = in[i + w];
             }
-            else if (i > 0 && pic8in[i - 1] != 255)
+            else if (i > 0 && in[i - 1] != kTransparentIndex)
             {
-                p = pic8in[i - 1];
+                neighbour = in[i - 1];
             }
-            else if (i < pixel_count - 1 && pic8in[i + 1] != 255)
+            else if (i < numTexels - 1 && in[i + 1] != kTransparentIndex)
             {
-                p = pic8in[i + 1];
+                neighbour = in[i + 1];
+            }
+            texel = (texel & 0xFF000000u) | (palette[neighbour] & 0x00FFFFFFu);
+        }
+
+        std::memcpy(&out[static_cast<size_t>(i) * 4], &texel, sizeof(texel));
+    }
+    return out;
+}
+
+// RGB 5:5:5 plus the top bit of the palette alpha, the GS's PSMCT16 layout, little-endian.
+std::vector<std::uint8_t> ExpandRgb16(const Image & image, const std::uint32_t (&palette)[kPaletteEntries])
+{
+    const int numTexels = image.width * image.height;
+    std::vector<std::uint8_t> out(static_cast<size_t>(numTexels) * 2);
+
+    for (int i = 0; i < numTexels; ++i)
+    {
+        const std::uint32_t colour = palette[image.indices[static_cast<size_t>(i)]];
+        const std::uint32_t r = colour & 0xFFu;
+        const std::uint32_t g = (colour >> 8) & 0xFFu;
+        const std::uint32_t b = (colour >> 16) & 0xFFu;
+        const std::uint32_t a = (colour >> 24) & 0xFFu;
+
+        const std::uint32_t texel = ((a & 0x1u) << 15) | ((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3);
+        out[static_cast<size_t>(i) * 2 + 0] = static_cast<std::uint8_t>(texel & 0xFFu);
+        out[static_cast<size_t>(i) * 2 + 1] = static_cast<std::uint8_t>(texel >> 8);
+    }
+    return out;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Output
+// ------------------------------------------------------------------------------------------------
+
+bool CloseOutput(std::FILE * file, const std::string & path)
+{
+    const bool written = (std::ferror(file) == 0);
+    const bool closed  = (std::fclose(file) == 0);
+    return (written && closed) ? true : Fail("cannot write '%s'", path.c_str());
+}
+
+bool WritePalette(const std::string & path, const std::uint32_t (&palette)[kPaletteEntries])
+{
+    std::FILE * file = std::fopen(path.c_str(), "wt");
+    if (file == nullptr)
+    {
+        return Fail("cannot create '%s'", path.c_str());
+    }
+
+    std::fprintf(file, "// File generated by imgdump\n#include \"builtin.h\"\n\n");
+    std::fprintf(file, "alignas(16) const unsigned int global_palette[256] = {\n    ");
+    int column = 0;
+    for (int i = 0; i < kPaletteEntries; ++i)
+    {
+        std::fprintf(file, "0x%08X", palette[i]);
+        if (i != kPaletteEntries - 1)
+        {
+            std::fprintf(file, ", ");
+        }
+        if (++column > 4)
+        {
+            std::fprintf(file, "\n    ");
+            column = 0;
+        }
+    }
+    std::fprintf(file, "\n};\n\n");
+    return CloseOutput(file, path);
+}
+
+bool WriteImage(const std::string & path, const std::string & name, const char * contents,
+                const Image & image, const std::vector<std::uint8_t> & bytes)
+{
+    std::FILE * file = std::fopen(path.c_str(), "wt");
+    if (file == nullptr)
+    {
+        return Fail("cannot create '%s'", path.c_str());
+    }
+
+    const int numBytes = static_cast<int>(bytes.size());
+    std::fprintf(file, "// File generated by imgdump (%s)\n#include \"builtin.h\"\n\n", contents);
+    std::fprintf(file, "const int %s_width  = %d;\n", name.c_str(), image.width);
+    std::fprintf(file, "const int %s_height = %d;\n", name.c_str(), image.height);
+    std::fprintf(file, "const int %s_size_bytes = %d;\n", name.c_str(), numBytes);
+    std::fprintf(file, "alignas(16) const unsigned char %s_data[] = {\n    ", name.c_str());
+    int column = 0;
+    for (int i = 0; i < numBytes; ++i)
+    {
+        std::fprintf(file, "0x%02X", bytes[static_cast<size_t>(i)]);
+        if (i != numBytes - 1)
+        {
+            std::fprintf(file, ", ");
+        }
+        if (++column > 14)
+        {
+            std::fprintf(file, "\n    ");
+            column = 0;
+        }
+    }
+    std::fprintf(file, "\n};\n\n");
+    return CloseOutput(file, path);
+}
+
+// The file name without its folders or extension, made a C identifier: "pics/m_main_logo.pcx"
+// names the m_main_logo_* symbols, in m_main_logo.cpp.
+std::string SymbolName(const char * path)
+{
+    const char * base = path;
+    for (const char * p = path; *p != '\0'; ++p)
+    {
+        if (*p == '/' || *p == '\\')
+        {
+            base = p + 1;
+        }
+    }
+
+    std::string name(base);
+    const size_t dot = name.rfind('.');
+    if (dot != std::string::npos && dot != 0)
+    {
+        name.resize(dot);
+    }
+
+    for (char & c : name)
+    {
+        const bool valid = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+        c = valid ? c : '_';
+    }
+    if (name.empty() || (name[0] >= '0' && name[0] <= '9'))
+    {
+        name.insert(0, 1, '_');
+    }
+    return name;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Command line
+// ------------------------------------------------------------------------------------------------
+
+struct Options
+{
+    Format                     format      = Format::Pal;
+    const char *               palettePath = nullptr;
+    std::string                outDir      = ".";
+    std::vector<const char *>  images;
+};
+
+void PrintUsage()
+{
+    std::fprintf(stderr,
+                 "usage: imgdump [--format pal|rgba32|rgb16] [--palette <colormap.pcx>] [--out <dir>] <image.pcx>...\n"
+                 "  --format F   pal (default): 8-bit palette indices; rgba32/rgb16: expanded through a palette\n"
+                 "  --palette P  write P's palette to palette.cpp, and expand rgba32/rgb16 through it\n"
+                 "               (without it, each image's own palette)\n"
+                 "  --out D      directory for the .cpp files (default: the current one)\n"
+                 "Each <name>.pcx becomes <name>.cpp, defining <name>_width/_height/_size_bytes/_data.\n");
+}
+
+bool ParseArgs(const int argc, char ** argv, Options & opts)
+{
+    for (int i = 1; i < argc; ++i)
+    {
+        const char * arg = argv[i];
+        const bool hasValue = (i + 1 < argc);
+
+        if (std::strcmp(arg, "--format") == 0 && hasValue)
+        {
+            const char * format = argv[++i];
+            if (std::strcmp(format, "pal") == 0)
+            {
+                opts.format = Format::Pal;
+            }
+            else if (std::strcmp(format, "rgba32") == 0)
+            {
+                opts.format = Format::Rgba32;
+            }
+            else if (std::strcmp(format, "rgb16") == 0)
+            {
+                opts.format = Format::Rgb16;
             }
             else
             {
-                p = 0;
+                return Fail("--format takes pal, rgba32 or rgb16, not '%s'", format);
             }
-
-            // Copy RGB components:
-            ((byte *)&rgba[i])[0] = ((const byte *)&palette[p])[0];
-            ((byte *)&rgba[i])[1] = ((const byte *)&palette[p])[1];
-            ((byte *)&rgba[i])[2] = ((const byte *)&palette[p])[2];
         }
-    }
-}
-
-void Img_UnPalettize16(int width, int height, const byte * pic8in,
-                       const u32 * palette, byte * pic16out)
-{
-#define RGBA16(r, g, b, a) \
-    (((a & 0x1) << 15) | (((b) >> 3) << 10) | (((g) >> 3) << 5) | ((r) >> 3))
-
-    int i;
-    u32 color;
-    byte r, g, b, a;
-    const int pixel_count = width * height;
-    u16 * dest = (u16 *)pic16out;
-
-    for (i = 0; i < pixel_count; ++i)
-    {
-        color = palette[pic8in[i]];
-
-        r = (color & 0xFF);
-        g = (color >>  8) & 0xFF;
-        b = (color >> 16) & 0xFF;
-        a = (color >> 24) & 0xFF;
-
-        *dest++ = RGBA16(r, g, b, a);
-    }
-}
-
-void DumpColormap(const u32 * palette)
-{
-    FILE * fd = fopen("palette.cpp", "wt");
-    if (fd == NULL)
-    {
-        Error("Can't fopen palette.cpp!");
-    }
-
-    int i, j = 0;
-
-    fprintf(fd, "// File generated by imgdump\n#include \"builtin.h\"\n\n");
-
-    fprintf(fd, "alignas(16) const unsigned int global_palette[256] = {\n    ");
-    for (i = 0; i < 256; ++i)
-    {
-        fprintf(fd, "0x%08X", palette[i]);
-
-        if (i != (256 - 1))
+        else if (std::strcmp(arg, "--palette") == 0 && hasValue)
         {
-            fprintf(fd, ", ");
+            opts.palettePath = argv[++i];
         }
-
-        j++;
-        if (j > 4)
+        else if (std::strcmp(arg, "--out") == 0 && hasValue)
         {
-            fprintf(fd, "\n    ");
-            j = 0;
+            opts.outDir = argv[++i];
         }
-    }
-    fprintf(fd, "\n};\n\n");
-
-    fclose(fd);
-}
-
-void DumpImg(const byte * pic, int width, int height, int size_bytes,
-             const char * filename, const char * tag)
-{
-    FILE * fd = fopen(filename, "wt");
-    if (fd == NULL)
-    {
-        Error("Can't fopen file!");
-    }
-
-    int i, j = 0;
-
-    fprintf(fd, "// File generated by imgdump (%s)\n#include \"builtin.h\"\n\n",
-            g_palettized ? "8-bit palette indices into global_palette" : "RGB");
-
-    fprintf(fd, "const int %s_width  = %d;\n", tag, width);
-    fprintf(fd, "const int %s_height = %d;\n", tag, height);
-    fprintf(fd, "const int %s_size_bytes = %d;\n", tag, size_bytes);
-    fprintf(fd, "alignas(16) const unsigned char %s_data[] = {\n    ", tag);
-    for (i = 0; i < size_bytes; ++i)
-    {
-        fprintf(fd, "0x%02X", pic[i]);
-
-        if (i != (size_bytes - 1))
+        else if (std::strcmp(arg, "-h") == 0 || std::strcmp(arg, "--help") == 0)
         {
-            fprintf(fd, ", ");
+            return false;
         }
-
-        j++;
-        if (j > 14)
+        else if (arg[0] == '-' && arg[1] != '\0')
         {
-            fprintf(fd, "\n    ");
-            j = 0;
-        }
-    }
-    fprintf(fd, "\n};\n\n");
-
-    fclose(fd);
-}
-
-void DoImage(const char * name, int num_channels)
-{
-    int width = 0, height = 0;
-    byte * pic = NULL;
-
-    int size_bytes;
-    byte * data_ptr;
-    const char * pcx_file = va("%s/%s.pcx", g_images_path, name);
-    bool res = LoadBinaryFile(pcx_file, &size_bytes, (void **)&data_ptr);
-    if (!res)
-    {
-        Error(va("Failed to load %s!", pcx_file));
-    }
-
-    if (!PCX_LoadFromMemory("conchars.pcx", data_ptr, size_bytes,
-                            &pic, NULL, &width, &height))
-    {
-        Error(va("Failed to load %s.pcx from memory!", name));
-    }
-
-    if (g_palettized)
-    {
-        // Dump the 8-bit palette indices as-is; on the PS2 they upload as a
-        // PSMT8 texture and color/alpha come from the global palette CLUT
-        // (index 255 is the transparent entry).
-        DumpImg(pic, width, height, (width * height), va("%s.cpp", name), name);
-    }
-    else
-    {
-        byte * pic_rgba = (byte *)malloc(width * height * num_channels);
-
-        if (num_channels == 4)
-        {
-            Img_UnPalettize32(width, height, pic, palette, pic_rgba);
+            return Fail("unknown or incomplete option '%s'", arg);
         }
         else
         {
-            Img_UnPalettize16(width, height, pic, palette, pic_rgba);
+            opts.images.push_back(arg);
         }
-
-        DumpImg(pic_rgba, width, height, (width * height * num_channels), va("%s.cpp", name), name);
-        free(pic_rgba);
     }
 
-    free(pic);
+    if (opts.images.empty() && opts.palettePath == nullptr)
+    {
+        return Fail("nothing to dump: give one or more images, or --palette");
+    }
+    return true;
 }
+
+std::string OutputPath(const Options & opts, const std::string & fileName)
+{
+    if (opts.outDir.empty() || opts.outDir.back() == '/')
+    {
+        return opts.outDir + fileName;
+    }
+    return opts.outDir + "/" + fileName;
+}
+
+} // namespace
 
 int main(int argc, char ** argv)
 {
-    // Output format: "rgb" (the default) unpalettizes through the global
-    // palette - RGBA32 or RGB16 per the DoImage calls below; "pal" dumps the
-    // raw 8-bit palette indices, a quarter/half the size, sharing one CLUT.
-    if (argc > 1)
+    Options opts;
+    if (!ParseArgs(argc, argv, opts))
     {
-        if (strcmp(argv[1], "pal") == 0)
-        {
-            g_palettized = true;
-        }
-        else if (strcmp(argv[1], "rgb") != 0)
-        {
-            Error("usage: imgdump [rgb|pal] [images_path]");
-        }
+        PrintUsage();
+        return 1;
     }
 
-    // Where the source .pcx images live.
-    if (argc > 2)
+    // Two inputs with one name would write one file over the other.
+    std::vector<std::string> names;
+    for (const char * imagePath : opts.images)
     {
-        g_images_path = argv[2];
+        const std::string name = SymbolName(imagePath);
+        for (const std::string & seen : names)
+        {
+            if (seen == name)
+            {
+                Fail("two images would both be dumped as '%s'", name.c_str());
+                return 1;
+            }
+        }
+        if (opts.palettePath != nullptr && name == "palette")
+        {
+            Fail("an image named 'palette' would overwrite palette.cpp");
+            return 1;
+        }
+        names.push_back(name);
     }
 
-    // colormap.pcx
+    Image paletteSource;
+    if (opts.palettePath != nullptr)
     {
-        int colormap_size;
-        byte * colormap_data;
-        const char * colormap_file = va("%s/colormap.pcx", g_images_path);
-        bool res = LoadBinaryFile(colormap_file, &colormap_size, (void **)&colormap_data);
-        if (!res)
+        const std::string outPath = OutputPath(opts, "palette.cpp");
+        if (!LoadPcx(opts.palettePath, /*pixels=*/false, paletteSource) || !WritePalette(outPath, paletteSource.palette))
         {
-            Error(va("Failed to load %s!", colormap_file));
+            return 1;
         }
-
-        if (!PCX_LoadFromMemory("colormap.pcx", colormap_data, colormap_size,
-                                NULL, palette, NULL, NULL))
-        {
-            Error("Failed to load colormap.pcx from memory!");
-        }
-
-        DumpColormap(palette);
+        std::printf("%s -> %s (global_palette)\n", opts.palettePath, outPath.c_str());
     }
 
-    DoImage("conchars", 4);
-    DoImage("conback",  2);
-    DoImage("backtile", 2);
+    for (size_t i = 0; i < opts.images.size(); ++i)
+    {
+        const char * imagePath = opts.images[i];
+        Image image;
+        if (!LoadPcx(imagePath, /*pixels=*/true, image))
+        {
+            return 1;
+        }
 
-    printf("Done! (%s)\n", g_palettized ? "8-bit palettized" : "RGB");
+        const std::uint32_t (&palette)[kPaletteEntries] = (opts.palettePath != nullptr) ? paletteSource.palette : image.palette;
+        const char * paletteName = (opts.palettePath != nullptr) ? "the global palette" : "the image's own palette";
+
+        std::vector<std::uint8_t> bytes;
+        std::string contents;
+        switch (opts.format)
+        {
+        case Format::Pal:
+            bytes    = image.indices;
+            contents = "8-bit palette indices into global_palette";
+            break;
+        case Format::Rgba32:
+            bytes    = ExpandRgba32(image, palette);
+            contents = std::string("RGBA 8:8:8:8 through ") + paletteName;
+            break;
+        case Format::Rgb16:
+            bytes    = ExpandRgb16(image, palette);
+            contents = std::string("RGB 5:5:5:1 through ") + paletteName;
+            break;
+        }
+
+        const std::string outPath = OutputPath(opts, names[i] + ".cpp");
+        if (!WriteImage(outPath, names[i], contents.c_str(), image, bytes))
+        {
+            return 1;
+        }
+        std::printf("%s -> %s (%dx%d, %d bytes)\n", imagePath, outPath.c_str(), image.width, image.height,
+                    static_cast<int>(bytes.size()));
+    }
+    return 0;
 }

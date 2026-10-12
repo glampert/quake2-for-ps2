@@ -26,6 +26,7 @@
 #include "ps2/renderer/vram.h"
 #include "ps2/renderer/vu1.h"
 #include "ps2/renderer/cmd_buffer.h"
+#include "ps2/renderer/splash_screen.h"
 #include "ps2/debug/profile.h"
 #include "ps2/renderer/profile.h"
 #include "ps2/system/heap.h"
@@ -378,11 +379,11 @@ void Init(const Config & cfg)
     // Display framebuffer 0 first, in the config's standard. These are graph_initialize's calls -
     // interlaced FIELD mode with the flicker filter, a black background, frame 0 on both read
     // circuits - with the mode passed in, where graph_initialize can only take the console's own.
+    // The output comes on below, once frame 0 holds a picture.
     graph_set_mode(GRAPH_MODE_INTERLACED, video::GraphMode(cfg.standard), GRAPH_MODE_FIELD, GRAPH_ENABLE);
     graph_set_screen(0, 0, cfg.width, cfg.height);
     graph_set_bgcolor(0, 0, 0);
     graph_set_framebuffer_filtered(static_cast<int>(frames[0].address), cfg.width, framePsm, 0, 0);
-    graph_enable_output();
 
     // The standard fixes the field rate the present clock counts in: 50 a second on PAL, 59.94
     // on NTSC.
@@ -411,11 +412,27 @@ void Init(const Config & cfg)
     // DIMX is global rather than per-context and never changes, so it is set up
     // once here; only the DTHE enable is rewritten per frame (see BeginFrame).
     pkt.SetRegister(static_cast<u64>(GS_REG_DIMX), PackDitherMatrix(kDitherMatrix));
+
+    // Frame 0 is on screen from here until the first present (the first frame is drawn into frame
+    // 1), showing whatever VRAM holds there. The boot splash left the id logo there in exactly this
+    // layout unless the config chose another one, so the logo stays up until the game's first
+    // frame. In any other layout those texels would show as garbage: the frame starts black.
+    if (!splash::IsShownIn(static_cast<int>(frames[0].address), cfg.width, cfg.height, framePsm, cfg.standard))
+    {
+        pkt.DisableTests(Index(DrawContext::Ctx0), zbuffer);
+        pkt.Clear(Index(DrawContext::Ctx0), 0.0f, 0.0f,
+                        static_cast<float>(cfg.width),
+                        static_cast<float>(cfg.height),
+                        0, 0, 0);
+        pkt.EnableTests(Index(DrawContext::Ctx0), zbuffer);
+    }
     pkt.Finish();
 
     s_texUploadPacket.SendNormal();
     GifPacket::WaitGifChannel();
     GifPacket::WaitFinish();
+
+    graph_enable_output();
 
     // Build and upload the CLUTs. None of the three ever changes again.
     s_globalPaletteClut.BuildFromPalette(cfg.palette);
