@@ -114,17 +114,17 @@ void turret_breach_think(edict_t * self)
     {
         float dmin, dmax;
 
-        dmin = PS2Quake_Fabsf(self->pos1[YAW] - self->move_angles[YAW]);
+        dmin = PS2_Fabsf(self->pos1[YAW] - self->move_angles[YAW]);
         if (dmin < -180)
             dmin += 360;
         else if (dmin > 180)
             dmin -= 360;
-        dmax = PS2Quake_Fabsf(self->pos2[YAW] - self->move_angles[YAW]);
+        dmax = PS2_Fabsf(self->pos2[YAW] - self->move_angles[YAW]);
         if (dmax < -180)
             dmax += 360;
         else if (dmax > 180)
             dmax -= 360;
-        if (PS2Quake_Fabsf(dmin) < PS2Quake_Fabsf(dmax))
+        if (PS2_Fabsf(dmin) < PS2_Fabsf(dmax))
             self->move_angles[YAW] = self->pos1[YAW];
         else
             self->move_angles[YAW] = self->pos2[YAW];
@@ -173,8 +173,8 @@ void turret_breach_think(edict_t * self)
         // x & y
         angle = self->s.angles[1] + self->owner->move_origin[1];
         angle *= (M_PI * 2 / 360);
-        target[0] = SnapToEights(self->s.origin[0] + PS2Quake_Cosf(angle) * self->owner->move_origin[0]);
-        target[1] = SnapToEights(self->s.origin[1] + PS2Quake_Sinf(angle) * self->owner->move_origin[0]);
+        target[0] = SnapToEights(self->s.origin[0] + PS2_Cosf(angle) * self->owner->move_origin[0]);
+        target[1] = SnapToEights(self->s.origin[1] + PS2_Sinf(angle) * self->owner->move_origin[0]);
         target[2] = self->owner->s.origin[2];
 
         VectorSubtract(target, self->owner->s.origin, dir);

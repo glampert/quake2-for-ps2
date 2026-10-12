@@ -102,7 +102,7 @@ void FrameLogMarkMap(const char * mapName);
 
 // Records a file being opened, written as an "FLOG#open,<row>,<name>" line with the next dump -
 // the row being the one whose columns are charged with the read. Called from FS_FOpenFile
-// through PS2Quake_FrameLogNoteOpen, so every mid-level load names itself in the log. Note that
+// through PS2_FrameLogNoteOpen, so every mid-level load names itself in the log. Note that
 // SV_Frame and CL_ReadPackets, where most of those happen, run before the frame's rollover: the
 // read then stretches the Frame of the row after (see debug/engine_profile.h).
 void FrameLogNoteOpen(const char * fileName);

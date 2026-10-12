@@ -128,11 +128,11 @@ const char * DumpMemTags(char * outBuffer, size_t outBufferSize);
 extern "C" {
 #endif // __cplusplus
 
-void * PS2Quake_ZMalloc(size_t sizeBytes);
-void PS2Quake_ZFree(void * ptr, size_t sizeBytes);
+void * PS2_ZMalloc(size_t sizeBytes);
+void PS2_ZFree(void * ptr, size_t sizeBytes);
 
-void * PS2Quake_AudioMalloc(size_t sizeBytes);
-void PS2Quake_AudioFree(void * ptr, size_t sizeBytes);
+void * PS2_AudioMalloc(size_t sizeBytes);
+void PS2_AudioFree(void * ptr, size_t sizeBytes);
 
 #ifdef __cplusplus
 } // extern "C"

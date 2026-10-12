@@ -34,13 +34,13 @@ extern "C" {
 #endif /* __cplusplus */
 
 /* Prints "[load +<ms since the previous trace> ms] <message>" with Com_Printf. */
-void PS2Quake_LoadTrace(const char * fmt, ...) __attribute__((format(printf, 1, 2)));
+void PS2_LoadTrace(const char * fmt, ...) __attribute__((format(printf, 1, 2)));
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
-#define PS2_LOAD_TRACE(...) PS2Quake_LoadTrace(__VA_ARGS__)
+#define PS2_LOAD_TRACE(...) PS2_LoadTrace(__VA_ARGS__)
 
 #else /* PS2_QUAKE_LOAD_TRACE */
 

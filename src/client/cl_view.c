@@ -611,9 +611,9 @@ void V_RenderView(float stereo_separation)
         // build a refresh entity list and calc cl.sim*
         // this also calls CL_CalcViewValues which loads
         // v_forward, etc.
-        PS2Quake_ProfileBegin(PS2_PROF_CL_SCENE); // [PS2_QUAKE]
+        PS2_ProfileBegin(PS2_PROF_CL_SCENE); // [PS2_QUAKE]
         CL_AddEntities();
-        PS2Quake_ProfileEnd(PS2_PROF_CL_SCENE);
+        PS2_ProfileEnd(PS2_PROF_CL_SCENE);
 
         if (cl_testparticles->value)
         {

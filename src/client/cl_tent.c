@@ -819,7 +819,7 @@ void CL_ParseTEnt(void)
 
         ex = CL_AllocExplosion();
         VectorCopy(pos, ex->ent.origin);
-        ex->ent.angles[0] = PS2Quake_ACosf(dir[2]) / M_PI * 180;
+        ex->ent.angles[0] = PS2_ACosf(dir[2]) / M_PI * 180;
         // PMM - fixed to correct for pitch of 0
         if (dir[0])
             ex->ent.angles[1] = atan2f(dir[1], dir[0]) / M_PI * 180;
@@ -1027,7 +1027,7 @@ void CL_ParseTEnt(void)
 
         ex = CL_AllocExplosion();
         VectorCopy(pos, ex->ent.origin);
-        ex->ent.angles[0] = PS2Quake_ACosf(dir[2]) / M_PI * 180;
+        ex->ent.angles[0] = PS2_ACosf(dir[2]) / M_PI * 180;
         // PMM - fixed to correct for pitch of 0
         if (dir[0])
             ex->ent.angles[1] = atan2f(dir[1], dir[0]) / M_PI * 180;
@@ -1270,7 +1270,7 @@ void CL_AddBeams(void)
             if (yaw < 0)
                 yaw += 360;
 
-            forward = PS2Quake_Sqrtf(dist[0] * dist[0] + dist[1] * dist[1]);
+            forward = PS2_Sqrtf(dist[0] * dist[0] + dist[1] * dist[1]);
             pitch = (atan2f(dist[2], forward) * -180.0 / M_PI);
             if (pitch < 0)
                 pitch += 360.0;
@@ -1289,7 +1289,7 @@ void CL_AddBeams(void)
         {
             model_length = 30.0;
         }
-        steps = PS2Quake_Ceilf(d / model_length);
+        steps = PS2_Ceilf(d / model_length);
         len = (d - model_length) / (steps - 1);
 
         // PMM - special case for lightning model .. if the real length is shorter than the model,
@@ -1471,7 +1471,7 @@ void CL_AddPlayerBeams(void)
             if (yaw < 0)
                 yaw += 360;
 
-            forward = PS2Quake_Sqrtf(dist[0] * dist[0] + dist[1] * dist[1]);
+            forward = PS2_Sqrtf(dist[0] * dist[0] + dist[1] * dist[1]);
             pitch = (atan2f(dist[2], forward) * -180.0 / M_PI);
             if (pitch < 0)
                 pitch += 360.0;
@@ -1531,7 +1531,7 @@ void CL_AddPlayerBeams(void)
         {
             model_length = 30.0;
         }
-        steps = PS2Quake_Ceilf(d / model_length);
+        steps = PS2_Ceilf(d / model_length);
         len = (d - model_length) / (steps - 1);
 
         // PMM - special case for lightning model .. if the real length is shorter than the model,
@@ -1612,7 +1612,7 @@ void CL_AddExplosions(void)
         if (ex->type == ex_free)
             continue;
         frac = (cl.time - ex->start) / 100.0;
-        f = PS2Quake_Floorf(frac);
+        f = PS2_Floorf(frac);
 
         ent = &ex->ent;
 

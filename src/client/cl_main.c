@@ -1809,9 +1809,9 @@ void CL_Frame(int msec)
     }
 
     // fetch results from server
-    PS2Quake_ProfileBegin(PS2_PROF_CL_PARSE); // [PS2_QUAKE]
+    PS2_ProfileBegin(PS2_PROF_CL_PARSE); // [PS2_QUAKE]
     CL_ReadPackets();
-    PS2Quake_ProfileEnd(PS2_PROF_CL_PARSE);
+    PS2_ProfileEnd(PS2_PROF_CL_PARSE);
 
     // send a new command message to the server
     CL_SendCommand();
@@ -1844,9 +1844,9 @@ void CL_Frame(int msec)
     }
 
     // update audio
-    PS2Quake_ProfileBegin(PS2_PROF_SND_MIX); // [PS2_QUAKE]
+    PS2_ProfileBegin(PS2_PROF_SND_MIX); // [PS2_QUAKE]
     S_Update(cl.refdef.vieworg, cl.v_forward, cl.v_right, cl.v_up);
-    PS2Quake_ProfileEnd(PS2_PROF_SND_MIX);
+    PS2_ProfileEnd(PS2_PROF_SND_MIX);
 
     CDAudio_Update();
 

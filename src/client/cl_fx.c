@@ -1344,13 +1344,13 @@ void CL_BigTeleportParticles(vec3_t org)
 
         angle = M_PI * 2 * (Com_FxRand() & 1023) / 1023.0;
         dist = Com_FxRand() & 31;
-        p->org[0] = org[0] + PS2Quake_Cosf(angle) * dist;
-        p->vel[0] = PS2Quake_Cosf(angle) * (70 + (Com_FxRand() & 63));
-        p->accel[0] = -PS2Quake_Cosf(angle) * 100;
+        p->org[0] = org[0] + PS2_Cosf(angle) * dist;
+        p->vel[0] = PS2_Cosf(angle) * (70 + (Com_FxRand() & 63));
+        p->accel[0] = -PS2_Cosf(angle) * 100;
 
-        p->org[1] = org[1] + PS2Quake_Sinf(angle) * dist;
-        p->vel[1] = PS2Quake_Sinf(angle) * (70 + (Com_FxRand() & 63));
-        p->accel[1] = -PS2Quake_Sinf(angle) * 100;
+        p->org[1] = org[1] + PS2_Sinf(angle) * dist;
+        p->vel[1] = PS2_Sinf(angle) * (70 + (Com_FxRand() & 63));
+        p->accel[1] = -PS2_Sinf(angle) * 100;
 
         p->org[2] = org[2] + 8 + (Com_FxRand() % 90);
         p->vel[2] = -100 + (Com_FxRand() & 31);
@@ -1976,14 +1976,14 @@ void CL_FlyParticles(vec3_t origin, int count)
     for (i = 0; i < count; i += 2)
     {
         angle = ltime * avelocities[i][0];
-        sy = PS2Quake_Sinf(angle);
-        cy = PS2Quake_Cosf(angle);
+        sy = PS2_Sinf(angle);
+        cy = PS2_Cosf(angle);
         angle = ltime * avelocities[i][1];
-        sp = PS2Quake_Sinf(angle);
-        cp = PS2Quake_Cosf(angle);
+        sp = PS2_Sinf(angle);
+        cp = PS2_Cosf(angle);
         angle = ltime * avelocities[i][2];
-        sr = PS2Quake_Sinf(angle);
-        cr = PS2Quake_Cosf(angle);
+        sr = PS2_Sinf(angle);
+        cr = PS2_Cosf(angle);
 
         forward[0] = cp * cy;
         forward[1] = cp * sy;
@@ -1998,7 +1998,7 @@ void CL_FlyParticles(vec3_t origin, int count)
 
         p->time = cl.time;
 
-        dist = PS2Quake_Sinf(ltime + i) * 64;
+        dist = PS2_Sinf(ltime + i) * 64;
         p->org[0] = origin[0] + bytedirs[i][0] * dist + forward[0] * BEAMLENGTH;
         p->org[1] = origin[1] + bytedirs[i][1] * dist + forward[1] * BEAMLENGTH;
         p->org[2] = origin[2] + bytedirs[i][2] * dist + forward[2] * BEAMLENGTH;
@@ -2076,14 +2076,14 @@ void CL_BfgParticles(entity_t * ent)
     for (i = 0; i < NUMVERTEXNORMALS; i++)
     {
         angle = ltime * avelocities[i][0];
-        sy = PS2Quake_Sinf(angle);
-        cy = PS2Quake_Cosf(angle);
+        sy = PS2_Sinf(angle);
+        cy = PS2_Cosf(angle);
         angle = ltime * avelocities[i][1];
-        sp = PS2Quake_Sinf(angle);
-        cp = PS2Quake_Cosf(angle);
+        sp = PS2_Sinf(angle);
+        cp = PS2_Cosf(angle);
         angle = ltime * avelocities[i][2];
-        sr = PS2Quake_Sinf(angle);
-        cr = PS2Quake_Cosf(angle);
+        sr = PS2_Sinf(angle);
+        cr = PS2_Cosf(angle);
 
         forward[0] = cp * cy;
         forward[1] = cp * sy;
@@ -2098,7 +2098,7 @@ void CL_BfgParticles(entity_t * ent)
 
         p->time = cl.time;
 
-        dist = PS2Quake_Sinf(ltime + i) * 64;
+        dist = PS2_Sinf(ltime + i) * 64;
         p->org[0] = ent->origin[0] + bytedirs[i][0] * dist + forward[0] * BEAMLENGTH;
         p->org[1] = ent->origin[1] + bytedirs[i][1] * dist + forward[1] * BEAMLENGTH;
         p->org[2] = ent->origin[2] + bytedirs[i][2] * dist + forward[2] * BEAMLENGTH;
@@ -2108,7 +2108,7 @@ void CL_BfgParticles(entity_t * ent)
 
         VectorSubtract(p->org, ent->origin, v);
         dist = VectorLength(v) / 90.0;
-        p->color = PS2Quake_Floorf(0xd0 + dist * 7);
+        p->color = PS2_Floorf(0xd0 + dist * 7);
         p->colorvel = 0;
 
         p->alpha = 1.0 - dist;

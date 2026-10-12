@@ -13,7 +13,7 @@
 #include <cstdarg>
 #include <cstdio>
 
-extern "C" void PS2Quake_LoadTrace(const char * fmt, ...)
+extern "C" void PS2_LoadTrace(const char * fmt, ...)
 {
     static int s_previousMsec = -1;
 

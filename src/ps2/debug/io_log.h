@@ -51,40 +51,40 @@ extern "C" {
 #endif /* __cplusplus */
 
 /* The loading plaque went up / came down. */
-void PS2Quake_IoLogLoadBegin(void);
-void PS2Quake_IoLogLoadEnd(void);
+void PS2_IoLogLoadBegin(void);
+void PS2_IoLogLoadEnd(void);
 
 /* A file system call is starting. The *End hook that closes it charges its time to a file. */
-void PS2Quake_IoLogCallBegin(void);
+void PS2_IoLogCallBegin(void);
 
 /* FS_LoadFile read 'name' whole from 'source' ("pak", "pkz" or "file"). */
-void PS2Quake_IoLogLoadFileEnd(const char * name, int lengthBytes, const char * source);
+void PS2_IoLogLoadFileEnd(const char * name, int lengthBytes, const char * source);
 
 /* FS_FOpenFile opened 'file' on 'name', FS_Read read from it, FS_FCloseFile closed it. */
-void PS2Quake_IoLogStreamOpenEnd(const char * name, const void * file, int lengthBytes, const char * source);
-void PS2Quake_IoLogStreamReadEnd(const void * file, int bytes);
-void PS2Quake_IoLogStreamCloseEnd(const void * file);
+void PS2_IoLogStreamOpenEnd(const char * name, const void * file, int lengthBytes, const char * source);
+void PS2_IoLogStreamReadEnd(const void * file, int bytes);
+void PS2_IoLogStreamCloseEnd(const void * file);
 
 /* From the pkz backend, inside a call: it read 'bytes' from the drive in 'ticks', it inflated
    for 'ticks', and the stream it is about to return inflates (so its reads report themselves). */
-void PS2Quake_IoLogStorageRead(unsigned bytes, unsigned ticks);
-void PS2Quake_IoLogInflate(unsigned ticks);
-void PS2Quake_IoLogCompressedStream(const void * file);
+void PS2_IoLogStorageRead(unsigned bytes, unsigned ticks);
+void PS2_IoLogInflate(unsigned ticks);
+void PS2_IoLogCompressedStream(const void * file);
 
 /* The clock the log counts in: the EE timer's 576 kHz tick. */
-unsigned PS2Quake_IoLogTicks(void);
+unsigned PS2_IoLogTicks(void);
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
 
-#define PS2_IO_LOG_LOAD_BEGIN()                 PS2Quake_IoLogLoadBegin()
-#define PS2_IO_LOG_LOAD_END()                   PS2Quake_IoLogLoadEnd()
-#define PS2_IO_LOG_CALL_BEGIN()                 PS2Quake_IoLogCallBegin()
-#define PS2_IO_LOG_LOAD_FILE_END(n, len, src)   PS2Quake_IoLogLoadFileEnd((n), (len), (src))
-#define PS2_IO_LOG_STREAM_OPEN_END(n, f, len, src) PS2Quake_IoLogStreamOpenEnd((n), (f), (len), (src))
-#define PS2_IO_LOG_STREAM_READ_END(f, bytes)    PS2Quake_IoLogStreamReadEnd((f), (bytes))
-#define PS2_IO_LOG_STREAM_CLOSE_END(f)          PS2Quake_IoLogStreamCloseEnd((f))
+#define PS2_IO_LOG_LOAD_BEGIN()                 PS2_IoLogLoadBegin()
+#define PS2_IO_LOG_LOAD_END()                   PS2_IoLogLoadEnd()
+#define PS2_IO_LOG_CALL_BEGIN()                 PS2_IoLogCallBegin()
+#define PS2_IO_LOG_LOAD_FILE_END(n, len, src)   PS2_IoLogLoadFileEnd((n), (len), (src))
+#define PS2_IO_LOG_STREAM_OPEN_END(n, f, len, src) PS2_IoLogStreamOpenEnd((n), (f), (len), (src))
+#define PS2_IO_LOG_STREAM_READ_END(f, bytes)    PS2_IoLogStreamReadEnd((f), (bytes))
+#define PS2_IO_LOG_STREAM_CLOSE_END(f)          PS2_IoLogStreamCloseEnd((f))
 
 #else /* PS2_QUAKE_IO_LOG */
 

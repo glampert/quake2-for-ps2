@@ -42,11 +42,11 @@ enum
 extern "C" {
 #endif /* __cplusplus */
 
-void PS2Quake_ProfileBegin(int site);
-void PS2Quake_ProfileEnd(int site);
+void PS2_ProfileBegin(int site);
+void PS2_ProfileEnd(int site);
 
 /* Names a file being opened in the frame log (ps2::debug::FrameLogNoteOpen). */
-void PS2Quake_FrameLogNoteOpen(const char * fileName);
+void PS2_FrameLogNoteOpen(const char * fileName);
 
 #ifdef __cplusplus
 }
@@ -54,9 +54,9 @@ void PS2Quake_FrameLogNoteOpen(const char * fileName);
 
 #else /* PS2_QUAKE_PROFILE */
 
-#define PS2Quake_ProfileBegin(site) ((void)0)
-#define PS2Quake_ProfileEnd(site)   ((void)0)
-#define PS2Quake_FrameLogNoteOpen(fileName) ((void)0)
+#define PS2_ProfileBegin(site) ((void)0)
+#define PS2_ProfileEnd(site)   ((void)0)
+#define PS2_FrameLogNoteOpen(fileName) ((void)0)
 
 #endif /* PS2_QUAKE_PROFILE */
 

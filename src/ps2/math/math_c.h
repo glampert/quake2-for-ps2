@@ -39,7 +39,7 @@ extern "C" {
  * returns sqrt(|x|) for a negative input.
  * ------------------------------------------------------------------------------------------------ */
 
-static inline float PS2Quake_Fabsf(float x)
+static inline float PS2_Fabsf(float x)
 {
 #ifdef _EE
     float r;
@@ -50,7 +50,7 @@ static inline float PS2Quake_Fabsf(float x)
 #endif
 }
 
-static inline float PS2Quake_Sqrtf(float x)
+static inline float PS2_Sqrtf(float x)
 {
 #ifdef _EE
     float r;
@@ -61,7 +61,7 @@ static inline float PS2Quake_Sqrtf(float x)
 #endif
 }
 
-static inline float PS2Quake_Minf(float a, float b)
+static inline float PS2_Minf(float a, float b)
 {
 #ifdef _EE
     float r;
@@ -72,7 +72,7 @@ static inline float PS2Quake_Minf(float a, float b)
 #endif
 }
 
-static inline float PS2Quake_Maxf(float a, float b)
+static inline float PS2_Maxf(float a, float b)
 {
 #ifdef _EE
     float r;
@@ -91,31 +91,31 @@ static inline float PS2Quake_Maxf(float a, float b)
  * conversion, so those come back unchanged.
  * ------------------------------------------------------------------------------------------------ */
 
-static inline float PS2Quake_Truncf(float x)
+static inline float PS2_Truncf(float x)
 {
-    return PS2Quake_Fabsf(x) < 8388608.0f ? (float)(int)x : x;
+    return PS2_Fabsf(x) < 8388608.0f ? (float)(int)x : x;
 }
 
-static inline float PS2Quake_Floorf(float x)
+static inline float PS2_Floorf(float x)
 {
-    const float t = PS2Quake_Truncf(x);
+    const float t = PS2_Truncf(x);
     return t > x ? t - 1.0f : t;
 }
 
-static inline float PS2Quake_Ceilf(float x)
+static inline float PS2_Ceilf(float x)
 {
-    const float t = PS2Quake_Truncf(x);
+    const float t = PS2_Truncf(x);
     return t < x ? t + 1.0f : t;
 }
 
 /* C's fmod: the remainder takes the sign of x. Returns 0 for y == 0, where libm gives NaN. */
-static inline float PS2Quake_Fmodf(float x, float y)
+static inline float PS2_Fmodf(float x, float y)
 {
     if (y == 0.0f)
     {
         return 0.0f;
     }
-    return x - PS2Quake_Truncf(x / y) * y;
+    return x - PS2_Truncf(x / y) * y;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -130,17 +130,17 @@ static inline float PS2Quake_Fmodf(float x, float y)
  * with |x| as the division loses the fraction (5e-6 at |x| = 50). Degree 7 would save two
  * instructions for twice the error. Valid for |x| < 2^31 turns (1.3e10), where the truncation
  * saturates. 18 FPU instructions, 8 constants. */
-static inline float PS2Quake_Cosf(float x)
+static inline float PS2_Cosf(float x)
 {
-    const float u  = PS2Quake_Fabsf(x) * 0.159154943f;
-    const float r  = PS2Quake_Fabsf((u - (float)(int)u) - 0.5f) - 0.25f;
+    const float u  = PS2_Fabsf(x) * 0.159154943f;
+    const float r  = PS2_Fabsf((u - (float)(int)u) - 0.5f) - 0.25f;
     const float r2 = r * r;
     return r * (6.28318548f + r2 * (-41.3416901f + r2 * (81.6032639f + r2 * (-76.5982056f + r2 * 39.87323f))));
 }
 
-static inline float PS2Quake_Sinf(float x)
+static inline float PS2_Sinf(float x)
 {
-    return PS2Quake_Cosf(x - 1.57079637f);
+    return PS2_Cosf(x - 1.57079637f);
 }
 
 /* Past 1/sqrt(2), asin(a) = pi/2 - asin(sqrt(1 - a^2)), and whichever of a and sqrt(1 - a^2)
@@ -148,11 +148,11 @@ static inline float PS2Quake_Sinf(float x)
  * halves, fed by a min.s. Degree 9 minimax, good to 3e-6 (the Taylor series of the same degree
  * this replaced was off by 8e-4 at 1/sqrt(2)). |x| > 1 behaves as |x| = 1, near enough: the EE's sqrt.s of a
  * slightly negative 1 - x^2 gives a small positive root. */
-static inline float PS2Quake_ASinf(float x)
+static inline float PS2_ASinf(float x)
 {
-    const float a  = PS2Quake_Fabsf(x);
-    const float s  = PS2Quake_Sqrtf(1.0f - a * a);
-    const float z  = PS2Quake_Minf(a, s);
+    const float a  = PS2_Fabsf(x);
+    const float s  = PS2_Sqrtf(1.0f - a * a);
+    const float z  = PS2_Minf(a, s);
     const float z2 = z * z;
     float r = z * (1.00003564f + z2 * (0.165359229f + z2 * (0.0881947204f + z2 * (-0.00743118813f + z2 * 0.110115983f))));
     if (a > s)
@@ -162,9 +162,9 @@ static inline float PS2Quake_ASinf(float x)
     return x < 0.0f ? -r : r;
 }
 
-static inline float PS2Quake_ACosf(float x)
+static inline float PS2_ACosf(float x)
 {
-    return 1.57079637f - PS2Quake_ASinf(x);
+    return 1.57079637f - PS2_ASinf(x);
 }
 
 #ifdef __cplusplus

@@ -251,7 +251,7 @@ Seconds ToSeconds(const u32 ticks)
 
 extern "C" {
 
-void PS2Quake_IoLogLoadBegin()
+void PS2_IoLogLoadBegin()
 {
     if (s_active)
     {
@@ -285,7 +285,7 @@ void PS2Quake_IoLogLoadBegin()
     Com_Printf("I/O log: recording load %u\n", s_loadIndex);
 }
 
-void PS2Quake_IoLogLoadEnd()
+void PS2_IoLogLoadEnd()
 {
     if (!s_active)
     {
@@ -315,7 +315,7 @@ void PS2Quake_IoLogLoadEnd()
     }
 }
 
-void PS2Quake_IoLogCallBegin()
+void PS2_IoLogCallBegin()
 {
     s_callBeginTicks     = Now();
     s_callReported       = {};
@@ -323,7 +323,7 @@ void PS2Quake_IoLogCallBegin()
     s_callCompressedFile = nullptr;
 }
 
-void PS2Quake_IoLogLoadFileEnd(const char * name, const int lengthBytes, const char * source)
+void PS2_IoLogLoadFileEnd(const char * name, const int lengthBytes, const char * source)
 {
     if (!s_active || lengthBytes < 0)
     {
@@ -340,7 +340,7 @@ void PS2Quake_IoLogLoadFileEnd(const char * name, const int lengthBytes, const c
     EmitFile(name, source, bytes, t);
 }
 
-void PS2Quake_IoLogStreamOpenEnd(const char * name, const void * file, const int lengthBytes, const char * source)
+void PS2_IoLogStreamOpenEnd(const char * name, const void * file, const int lengthBytes, const char * source)
 {
     (void)lengthBytes;
     if (!s_active || file == nullptr)
@@ -370,7 +370,7 @@ void PS2Quake_IoLogStreamOpenEnd(const char * name, const void * file, const int
     }
 }
 
-void PS2Quake_IoLogStreamReadEnd(const void * file, const int bytes)
+void PS2_IoLogStreamReadEnd(const void * file, const int bytes)
 {
     if (!s_active || bytes <= 0)
     {
@@ -390,7 +390,7 @@ void PS2Quake_IoLogStreamReadEnd(const void * file, const int bytes)
     }
 }
 
-void PS2Quake_IoLogStreamCloseEnd(const void * file)
+void PS2_IoLogStreamCloseEnd(const void * file)
 {
     StreamRecord * const record = FindStream(file);
     if (record == nullptr)
@@ -408,25 +408,25 @@ void PS2Quake_IoLogStreamCloseEnd(const void * file)
     record->file = nullptr; // A stream closed after its load ended (the demo) goes unlogged.
 }
 
-void PS2Quake_IoLogStorageRead(const unsigned bytes, const unsigned ticks)
+void PS2_IoLogStorageRead(const unsigned bytes, const unsigned ticks)
 {
     s_callReported.storageBytes += bytes;
     s_callReported.storageTicks += ticks;
     s_callHasReport = true;
 }
 
-void PS2Quake_IoLogInflate(const unsigned ticks)
+void PS2_IoLogInflate(const unsigned ticks)
 {
     s_callReported.inflateTicks += ticks;
     s_callHasReport = true;
 }
 
-void PS2Quake_IoLogCompressedStream(const void * file)
+void PS2_IoLogCompressedStream(const void * file)
 {
     s_callCompressedFile = file;
 }
 
-unsigned PS2Quake_IoLogTicks()
+unsigned PS2_IoLogTicks()
 {
     return Now();
 }

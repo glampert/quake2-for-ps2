@@ -1147,7 +1147,7 @@ void Z_Free(void * ptr)
     z_count--;
     z_bytes -= z->size;
 
-    PS2Quake_ZFree(z, z->size);
+    PS2_ZFree(z, z->size);
 }
 
 /*
@@ -1179,7 +1179,7 @@ void * Z_TagMalloc(int size, int tag)
     zhead_t * z;
 
     size = size + sizeof(zhead_t);
-    z = PS2Quake_ZMalloc(size);
+    z = PS2_ZMalloc(size);
 
     if (z == NULL)
     {
@@ -1603,9 +1603,9 @@ void Qcommon_Frame(int msec)
         time_before = Sys_Milliseconds();
     }
 
-    PS2Quake_ProfileBegin(PS2_PROF_SERVER); // [PS2_QUAKE]
+    PS2_ProfileBegin(PS2_PROF_SERVER); // [PS2_QUAKE]
     SV_Frame(msec);
-    PS2Quake_ProfileEnd(PS2_PROF_SERVER);
+    PS2_ProfileEnd(PS2_PROF_SERVER);
 
     if (host_speeds->value)
     {

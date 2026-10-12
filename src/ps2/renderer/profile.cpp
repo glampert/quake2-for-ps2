@@ -83,18 +83,18 @@ static ps2::debug::CpuCycles s_engineStart[PS2_PROF_SITE_COUNT];
 
 } // namespace
 
-extern "C" void PS2Quake_ProfileBegin(const int site)
+extern "C" void PS2_ProfileBegin(const int site)
 {
     s_engineStart[site] = ps2::debug::ReadCycles();
 }
 
-extern "C" void PS2Quake_ProfileEnd(const int site)
+extern "C" void PS2_ProfileEnd(const int site)
 {
     ps2::debug::ProfileAccumulate(s_engineEvents[site],
                                   ps2::debug::ReadCycles() - s_engineStart[site]);
 }
 
-extern "C" void PS2Quake_FrameLogNoteOpen(const char * fileName)
+extern "C" void PS2_FrameLogNoteOpen(const char * fileName)
 {
     ps2::debug::FrameLogNoteOpen(fileName);
 }

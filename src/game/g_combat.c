@@ -273,9 +273,9 @@ static int CheckArmor(edict_t * ent, vec3_t point, vec3_t normal, int damage, in
     armor = GetItemByIndex(index);
 
     if (dflags & DAMAGE_ENERGY)
-        save = PS2Quake_Ceilf(((gitem_armor_t *)armor->info)->energy_protection * damage);
+        save = PS2_Ceilf(((gitem_armor_t *)armor->info)->energy_protection * damage);
     else
-        save = PS2Quake_Ceilf(((gitem_armor_t *)armor->info)->normal_protection * damage);
+        save = PS2_Ceilf(((gitem_armor_t *)armor->info)->normal_protection * damage);
     if (save >= client->pers.inventory[index])
         save = client->pers.inventory[index];
 

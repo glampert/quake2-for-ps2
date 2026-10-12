@@ -119,7 +119,7 @@ namespace {
 #if PS2_QUAKE_IO_LOG
 u32 IoTicks()
 {
-    return PS2Quake_IoLogTicks();
+    return PS2_IoLogTicks();
 }
 #endif // PS2_QUAKE_IO_LOG
 
@@ -158,7 +158,7 @@ bool ReadAt(ps2_pkz_t & pkz, const u32 offset, void * dest, const u32 bytes)
     }
 
 #if PS2_QUAKE_IO_LOG
-    PS2Quake_IoLogStorageRead(bytes, IoTicks() - startTicks);
+    PS2_IoLogStorageRead(bytes, IoTicks() - startTicks);
 #endif // PS2_QUAKE_IO_LOG
     return true;
 }
@@ -208,7 +208,7 @@ tinfl_status Inflate(tinfl_decompressor * inflator, const u8 * in, size_t * inBy
     const tinfl_status status = tinfl_decompress(inflator, in, inBytes, outStart, outNext, outBytes, static_cast<mz_uint32>(flags));
 
 #if PS2_QUAKE_IO_LOG
-    PS2Quake_IoLogInflate(IoTicks() - startTicks);
+    PS2_IoLogInflate(IoTicks() - startTicks);
 #endif // PS2_QUAKE_IO_LOG
     return status;
 }
@@ -1047,7 +1047,7 @@ FILE * PS2_PkzOpenStream(ps2_pkz_t * pkz, const int index, const char * name)
     pkz->openStreams += 1;
 
 #if PS2_QUAKE_IO_LOG
-    PS2Quake_IoLogCompressedStream(file);
+    PS2_IoLogCompressedStream(file);
 #endif // PS2_QUAKE_IO_LOG
     return file;
 }

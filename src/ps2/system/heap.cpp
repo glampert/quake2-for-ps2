@@ -506,22 +506,22 @@ const char * DumpMemTags(char * const outBuffer, size_t const outBufferSize)
 
 extern "C" {
 
-void * PS2Quake_ZMalloc(size_t sizeBytes)
+void * PS2_ZMalloc(size_t sizeBytes)
 {
     return ps2::heap::Alloc(sizeBytes, ps2::heap::MemTag::Quake);
 }
 
-void PS2Quake_ZFree(void * ptr, size_t sizeBytes)
+void PS2_ZFree(void * ptr, size_t sizeBytes)
 {
     ps2::heap::Free(ptr, sizeBytes, ps2::heap::MemTag::Quake);
 }
 
-void * PS2Quake_AudioMalloc(size_t sizeBytes)
+void * PS2_AudioMalloc(size_t sizeBytes)
 {
     return ps2::heap::Alloc(sizeBytes, ps2::heap::MemTag::Audio);
 }
 
-void PS2Quake_AudioFree(void * ptr, size_t sizeBytes)
+void PS2_AudioFree(void * ptr, size_t sizeBytes)
 {
     ps2::heap::Free(ptr, sizeBytes, ps2::heap::MemTag::Audio);
 }

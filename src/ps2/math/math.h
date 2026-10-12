@@ -19,17 +19,17 @@ constexpr float kTwoPI  = 6.283185307179586476925286766559f;
 constexpr float kHalfPI = 1.5707963267948966192313216916398f;
 
 // NOTE: Sine/cosine and angles are in radians as in the std lib counterparts.
-inline float Sinf(float x)            { return PS2Quake_Sinf(x);     }
-inline float Cosf(float x)            { return PS2Quake_Cosf(x);     }
-inline float ASinf(float x)           { return PS2Quake_ASinf(x);    }
-inline float ACosf(float x)           { return PS2Quake_ACosf(x);    }
-inline float Fabsf(float x)           { return PS2Quake_Fabsf(x);    }
-inline float Sqrtf(float x)           { return PS2Quake_Sqrtf(x);    }
-inline float Minf(float a, float b)   { return PS2Quake_Minf(a, b);  }
-inline float Maxf(float a, float b)   { return PS2Quake_Maxf(a, b);  }
-inline float Floorf(float x)          { return PS2Quake_Floorf(x);   }
-inline float Ceilf(float x)           { return PS2Quake_Ceilf(x);    }
-inline float Fmodf(float x, float y)  { return PS2Quake_Fmodf(x, y); }
+inline float Sinf(float x)            { return PS2_Sinf(x);     }
+inline float Cosf(float x)            { return PS2_Cosf(x);     }
+inline float ASinf(float x)           { return PS2_ASinf(x);    }
+inline float ACosf(float x)           { return PS2_ACosf(x);    }
+inline float Fabsf(float x)           { return PS2_Fabsf(x);    }
+inline float Sqrtf(float x)           { return PS2_Sqrtf(x);    }
+inline float Minf(float a, float b)   { return PS2_Minf(a, b);  }
+inline float Maxf(float a, float b)   { return PS2_Maxf(a, b);  }
+inline float Floorf(float x)          { return PS2_Floorf(x);   }
+inline float Ceilf(float x)           { return PS2_Ceilf(x);    }
+inline float Fmodf(float x, float y)  { return PS2_Fmodf(x, y); }
 
 inline float RSqrtf(float x)
 {

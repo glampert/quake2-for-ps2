@@ -172,9 +172,9 @@ on files returned by FS_FOpenFile...
 void FS_FCloseFile(FILE * fp)
 {
     PS2_IO_LOG_CALL_BEGIN();               // [PS2_QUAKE]: ps2/debug/io_log.h
-    PS2Quake_ProfileBegin(PS2_PROF_FS_IO); // [PS2_QUAKE]: see FS_FOpenFile
+    PS2_ProfileBegin(PS2_PROF_FS_IO); // [PS2_QUAKE]: see FS_FOpenFile
     fclose(fp);
-    PS2Quake_ProfileEnd(PS2_PROF_FS_IO);
+    PS2_ProfileEnd(PS2_PROF_FS_IO);
     PS2_IO_LOG_STREAM_CLOSE_END(fp);
 }
 
@@ -484,10 +484,10 @@ int FS_FOpenFile(const char * filename, FILE ** file)
     const int open_start_ms = Sys_Milliseconds();
 #endif
     PS2_IO_LOG_CALL_BEGIN();
-    PS2Quake_FrameLogNoteOpen(filename);
-    PS2Quake_ProfileBegin(PS2_PROF_FS_IO);
+    PS2_FrameLogNoteOpen(filename);
+    PS2_ProfileBegin(PS2_PROF_FS_IO);
     len = FS_FOpenFileImpl(filename, file, &source);
-    PS2Quake_ProfileEnd(PS2_PROF_FS_IO);
+    PS2_ProfileEnd(PS2_PROF_FS_IO);
     PS2_IO_LOG_STREAM_OPEN_END(filename, *file, len, source);
 
     // [PS2_QUAKE]: the caller streams it from here, so the loading screen names it now.
@@ -579,9 +579,9 @@ static void FS_ReadImpl(void * buffer, int len, FILE * fp)
 void FS_Read(void * buffer, int len, FILE * fp)
 {
     PS2_IO_LOG_CALL_BEGIN();               // [PS2_QUAKE]: ps2/debug/io_log.h
-    PS2Quake_ProfileBegin(PS2_PROF_FS_IO); // [PS2_QUAKE]: see FS_FOpenFile
+    PS2_ProfileBegin(PS2_PROF_FS_IO); // [PS2_QUAKE]: see FS_FOpenFile
     FS_ReadImpl(buffer, len, fp);
-    PS2Quake_ProfileEnd(PS2_PROF_FS_IO);
+    PS2_ProfileEnd(PS2_PROF_FS_IO);
     PS2_IO_LOG_STREAM_READ_END(fp, len);
 }
 
@@ -609,10 +609,10 @@ int FS_LoadFile(const char * path, void ** buffer)
     // seek and one read, where FS_FOpenFile's reopen made it an open, a seek, a read per KB and
     // a close. A file on disk is read unbuffered for the same reason.
     PS2_IO_LOG_CALL_BEGIN();
-    PS2Quake_FrameLogNoteOpen(path);
-    PS2Quake_ProfileBegin(PS2_PROF_FS_IO);
+    PS2_FrameLogNoteOpen(path);
+    PS2_ProfileBegin(PS2_PROF_FS_IO);
     len = FS_FindFile(path, &h, &pak, &entry);
-    PS2Quake_ProfileEnd(PS2_PROF_FS_IO);
+    PS2_ProfileEnd(PS2_PROF_FS_IO);
 
     file_from_pak = (pak != NULL); // SV_BeginDownload_f reads it after this, as it did after FS_FOpenFile
 
@@ -641,7 +641,7 @@ int FS_LoadFile(const char * path, void ** buffer)
     buf = Z_Malloc(len);
     *buffer = buf;
 
-    PS2Quake_ProfileBegin(PS2_PROF_FS_IO);
+    PS2_ProfileBegin(PS2_PROF_FS_IO);
     if (pak && pak->pkz) // [PS2_QUAKE]: a compressed pack reads (and inflates) the file itself.
     {
         if (!PS2_PkzRead(pak->pkz, entry->filepos, buf))
@@ -660,7 +660,7 @@ int FS_LoadFile(const char * path, void ** buffer)
         FS_ReadImpl(buf, len, h);
         fclose(h);
     }
-    PS2Quake_ProfileEnd(PS2_PROF_FS_IO);
+    PS2_ProfileEnd(PS2_PROF_FS_IO);
     PS2_IO_LOG_LOAD_FILE_END(path, len, FS_SourceName(pak)); // [PS2_QUAKE]
 
     PS2_LOAD_TRACE("FS_LoadFile %s: %d KB from %s in %d ms", path, (len + 1023) / 1024,
