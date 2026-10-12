@@ -3,8 +3,8 @@
 
 ![Quake 2 PS2](misc/screens/banner.jpg "Quake 2 PS2")
 
-> **Tested on real hardware.** The game boots and plays on a PS2 console, loading its data from
-> a USB drive, as well as in the PCSX2 emulator. Both TV standards are supported, **PAL (50 Hz)
+> **Tested on real hardware.** The game boots and plays on a PS2, loading its data from a USB drive
+> or PlayStation HDD, as well as in the PCSX2 emulator. Both TV standards are supported, **PAL (50 Hz)
 > and NTSC (60 Hz)**: auto-detected from the console, or forced with `ps2_video_mode` (also in
 > the video options menu), so a PAL console can run at 60 Hz on a TV that takes it.
 
@@ -53,8 +53,7 @@ at a small number of well defined seams — `refexport_t`, `SNDDMA_*`, `IN_*`, `
   files as `pak0.pak` in 92 MB instead of 175, so a level load reads about half the bytes off a
   USB stick and takes 25-40% less time. It is inflated on the EE as it is read.
 - Runs on both the **PCSX2 emulator** and **real hardware**, loading game data from
-  `host:` for development, an APA/PFS PS2 HDD, or USB mass storage, in that order, with PAL
-  or NTSC video.
+  `host:` for development, an APA/PFS PS2 HDD, or USB mass storage, with PAL or NTSC video.
 
 ---
 
@@ -1113,7 +1112,9 @@ against a release ELF you get function names from the symbol table but no file o
 
 **Engine features**
 
-- Saving to MEMORY CARD slot 2, and formatting an unformatted card from the game.
+- Potentially support loading the game from Memory Card to support microSD to MC adapters
+  (like the MX4SIO SIO2SD Adapter).
+- Saving to Memory Card slot 2, and formatting an unformatted card from the game.
 - Support second game connector and multiple slots. Right now only port 0/slot 0 (controller connector 1) are supported.
 - Split-screen mutiplayer should be possible with a bit of work!
 
@@ -1124,14 +1125,23 @@ against a release ELF you get function names from the symbol table but no file o
   through the pack (the HDD then serves more of them from its read-ahead, and small files on
   USB share commands); deflate a sample delta instead of raw PCM for sounds (about 71% of
   their size instead of 90%); read the `.pkz` in whole, cluster-aligned 32 KB pieces.
-- More real-hardware coverage. So far a PAL console has been tested booting from USB, under its
-  own PAL and forced NTSC. HDD/PFS boot and the USB keyboard have only been exercised in PCSX2.
+- More real-hardware coverage. So far a PAL console has been tested booting from USB and HDD/PFS,
+  under its own PAL and forced NTSC. The USB keyboard has only been exercised in PCSX2.
 
 Contributions are welcome. The one style rule worth stating up front: the backend is held to
 `-Werror` with a strict warning set (`-Wconversion`, `-Wsign-conversion`, `-Wshadow`,
 `-Wdouble-promotion`, `-Wcast-align` and more), so conversions must be intentional and
 explicit. The engine's original C is deliberately exempt from all of it. Formatting follows
 the `_clang-format` file at the root of the repo.
+
+---
+
+## Special thanks
+
+- [Wolf3s](https://github.com/Wolf3s).
+- The [PS2DEV][link_ps2_dev] project and its contributors.
+- The [PCSX2](https://github.com/pcsx2/pcsx2) project and its contributors.
+- [id Software](https://www.idsoftware.com/en) for making some of their most influential games open source.
 
 ---
 
