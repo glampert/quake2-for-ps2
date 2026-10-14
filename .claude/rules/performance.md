@@ -25,8 +25,8 @@ paths:
 - **Parked: background loading** of mid-level models/skins (a loader thread doing I/O,
   decode, and a Loading state). It is the only fix left for DM player joins and dropped world
   weapons. Decode matters as much as I/O: v_rail's md2+skin cost ~8.9 ms, of which only
-  ~1.7 ms was I/O. The design is in the user's plan file
-  `~/.claude/plans/i-want-you-to-binary-spindle.md`.
+  ~1.7 ms was I/O. The design is in
+  [docs/plans/background-loading.md](../../docs/plans/background-loading.md).
 - **Emergency chain drains: fixed 2026-10-11** (`cmdbuf::Reserve`'s overflow path). An overflow
   used to kick what was built, wait for the GS to draw all of it and rebuild in the same half, so
   the EE sat idle. On a console that cost ~5 ms per overflowing frame, and under NTSC those
