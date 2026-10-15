@@ -2,8 +2,9 @@
  * File: debug_menu.h
  * Brief: The Options menu's "debug" page: the backend's debugging aids on the gamepad, for a
  *        console with no keyboard to type them at the Quake console. The log file, the IOP and
- *        save reports, a dump of the console to a file, and the perf and map cycle tests in the
- *        builds that have them.
+ *        save reports, a dump of the console to a file, a screenshot, god mode and "give all" for
+ *        the player of a game in progress, and the perf and map cycle tests in the builds that
+ *        have them.
  *        NOTE: Shared header between C and C++.
  *
  * This source code is released under the GNU GPL v2 license.

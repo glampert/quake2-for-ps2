@@ -322,6 +322,14 @@ void Cmd_God_f(edict_t * ent)
     gi.cprintf(ent, PRINT_HIGH, msg);
 }
 
+// [PS2_QUAKE]: the debug menu's god mode switch (ps2/debug/debug_menu.cpp) shows this, and it
+// toggles it with the "god" command above. Player one is the console's own. Only valid while
+// the server runs a game (ss_game): between games g_edicts is freed.
+int PS2_GodModeOn(void)
+{
+    return (g_edicts[1].flags & FL_GODMODE) != 0;
+}
+
 /*
 ==================
 Cmd_Notarget_f

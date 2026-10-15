@@ -31,6 +31,7 @@ extern "C" {
 void M_PushMenu(void (*draw)(void), const char * (*key)(int k));
 const char * Default_MenuKey(menuframework_s * menu, int key);
 void Key_ClearTyping(void);
+int PS2_GodModeOn(void); // g_cmds.c
 } // extern "C"
 
 namespace ps2::debug {
@@ -45,6 +46,8 @@ static menuaction_s    s_dumpIopAction;
 static menuaction_s    s_saveInfoAction;
 static menuaction_s    s_dumpConsoleAction;
 static menuaction_s    s_screenshotAction;
+static menulist_s      s_godModeSpin;
+static menuaction_s    s_giveAllAction;
 #if PS2_QUAKE_PROFILE || PS2_QUAKE_DEBUG
 static menulist_s      s_testQuitSpin;
 #endif // PS2_QUAKE_PROFILE || PS2_QUAKE_DEBUG
@@ -58,6 +61,14 @@ static menuaction_s    s_mapCycleAction;
 // What the last row picked did, under the menu, for the rows that stay on the page. Empty for none.
 static char s_feedback[MAX_OSPATH + 16]; // Room for "couldn't write " and a path.
 static int  s_feedbackY = 0;
+
+// The god mode the switch last showed, so a press past either end (qmenu still calls back on it)
+// doesn't send another toggle.
+static int s_godModeShown = 0;
+
+// Com_ServerState() hands back a server_state_t (server/server.h) as a plain int, as perf_run.cpp
+// has it. Not worth a server header for one comparison.
+constexpr int kServerGame = 2; // ss_game
 
 // ------------------------------------------------------------------------------------------------
 // Rows
@@ -140,6 +151,61 @@ void TakeScreenshot(void *)
     Cbuf_AddText("wait\nscreenshot\n");
 }
 
+// The cheat rows act on the player of a game in progress: one the server runs, not a demo or a
+// cinematic, with the client in it. They go through the game's own console commands, so its
+// rule holds too: a deathmatch needs "cheats 1". A row refused here says why under the menu.
+bool InGame()
+{
+    return Com_ServerState() == kServerGame && cls.state == ca_active;
+}
+
+bool CheatsAllowed()
+{
+    if (!InGame())
+    {
+        std::snprintf(s_feedback, sizeof(s_feedback), "start a game first");
+        return false;
+    }
+    if (Cvar_VariableValue("deathmatch") != 0.0f && Cvar_VariableValue("cheats") == 0.0f)
+    {
+        std::snprintf(s_feedback, sizeof(s_feedback), "deathmatch needs cheats 1 for this");
+        return false;
+    }
+    return true;
+}
+
+// "god" toggles, so it is sent only when the switch moved. The server runs it next frame, even
+// with the game paused under the menu.
+void GodModeChanged(void * self)
+{
+    menulist_s & spin = *static_cast<menulist_s *>(self);
+    s_feedback[0] = '\0';
+
+    if (spin.curvalue == s_godModeShown)
+    {
+        return;
+    }
+    if (!CheatsAllowed())
+    {
+        spin.curvalue = s_godModeShown;
+        return;
+    }
+
+    Cmd_ExecuteString("god");
+    s_godModeShown = spin.curvalue;
+}
+
+// Every weapon, 1000 of each ammo (up to what the player can carry), body armor, the power
+// shield, full health and one of every other item, keys included.
+void GiveAll(void *)
+{
+    if (CheatsAllowed())
+    {
+        Cmd_ExecuteString("give all");
+        std::snprintf(s_feedback, sizeof(s_feedback), "gave all weapons and items");
+    }
+}
+
 #if PS2_QUAKE_PROFILE || PS2_QUAKE_DEBUG
 void TestQuitChanged(void * self)
 {
@@ -194,9 +260,9 @@ void AddAction(menuaction_s & action, const int y, const char * name, const char
     Menu_AddItem(&s_menu, &action);
 }
 
-// An off/on spin control showing a cvar's value; left and right change it.
-void AddSpin(menulist_s & spin, const int y, const char * name, const char * statusBar,
-             const char * cvarName, void (*callback)(void *))
+// An off/on spin control; left and right change it.
+void AddSpin(menulist_s & spin, const int y, const char * name, const char * statusBar, const bool on,
+             void (*callback)(void *))
 {
     spin = {};
     spin.generic.type      = MTYPE_SPINCONTROL;
@@ -205,7 +271,7 @@ void AddSpin(menulist_s & spin, const int y, const char * name, const char * sta
     spin.generic.statusbar = statusBar;
     spin.generic.callback  = callback;
     spin.itemnames         = s_offOn;
-    spin.curvalue          = (Cvar_VariableValue(cvarName) != 0.0f) ? 1 : 0;
+    spin.curvalue          = on ? 1 : 0;
     Menu_AddItem(&s_menu, &spin);
 }
 
@@ -220,7 +286,7 @@ void Init()
     int y = 0;
 
     AddSpin(s_logFileSpin, y, "log to file", "copy the console to quake2.log by baseq2/; slow on USB",
-            "ps2_logfile", LogFileChanged);
+            Cvar_VariableValue("ps2_logfile") != 0.0f, LogFileChanged);
 
     AddAction(s_dumpIopAction, y += 10, "dump IOP modules",
               "the IOP boot report, modules and free memory, on the console", DumpIopModules);
@@ -232,10 +298,17 @@ void Init()
               "close the menu, then save the screen to baseq2/scrnshot/", TakeScreenshot);
 
     y += 10; // A blank row between groups, as on the video page.
+    s_godModeShown = (InGame() && (PS2_GodModeOn() != 0)) ? 1 : 0;
+    AddSpin(s_godModeSpin, y += 10, "god mode", "take no damage; needs a game, and cheats 1 in deathmatch",
+            s_godModeShown != 0, GodModeChanged);
+    AddAction(s_giveAllAction, y += 10, "give all", "every weapon, ammo, armor and item to the player",
+              GiveAll);
+
 #if PS2_QUAKE_PROFILE || PS2_QUAKE_DEBUG
+    y += 10;
     AddSpin(s_testQuitSpin, y += 10, "quit after a test",
-            "quit the game when a test ends; off stays up for the next one", "ps2_test_quit",
-            TestQuitChanged);
+            "quit the game when a test ends; off stays up for the next one",
+            Cvar_VariableValue("ps2_test_quit") != 0.0f, TestQuitChanged);
 #endif // PS2_QUAKE_PROFILE || PS2_QUAKE_DEBUG
 #if PS2_QUAKE_PROFILE
     AddAction(s_perfTestAction, y += 10, "start perf test",

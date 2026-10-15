@@ -1032,9 +1032,14 @@ on the gamepad, for a console with no keyboard: `log to file` (`ps2_logfile`, ch
 left/right), `dump IOP modules` (`ps2_dump_iop_mods`), `list saves` (`ps2_saveinfo`),
 `save console to file` (`condump console`, the console's last ~420 lines in
 `baseq2/console.txt`), `take screenshot` (which closes the menu and runs `screenshot` a frame
-later, so the shot has no menu on it), and in the builds that have them `quit after a test` (`ps2_test_quit`),
+later, so the shot has no menu on it), `god mode` (an on/off switch sending `god`, which shows the
+game's own flag through `PS2_GodModeOn` in g_cmds.c), `give all` (`give all`: every weapon, ammo,
+body armor, the power shield, health and every other item), and in the builds that have them
+`quit after a test` (`ps2_test_quit`),
 `start perf test` (`ps2_perftest`, profiling builds) and `start map cycle` (`ps2_testmaps`, debug
-builds). The two report rows open the console on what they printed, stopping the attract loop
+builds). The two cheat rows need a game in progress (not the attract demos) and, as the console
+commands do, `cheats 1` in deathmatch; otherwise they say why under the menu. The two report rows
+open the console on what they printed, stopping the attract loop
 first as "go to console" does; L2/R2 scroll it, and Select goes back to the demos. Every level
 the tests load autosaves slot 0 to the save device, the memory card on a console. A console's
 perf capture reaches a file only in a `PS2_QUAKE_FRAME_LOG_FILE=1` build (see
