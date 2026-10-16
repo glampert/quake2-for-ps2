@@ -181,9 +181,11 @@ with `STRIP_ELF=0` to ship the unstripped ELF as `quake2.elf` instead.
 | `make clean_vu` | Removes only the assembled VU microprograms (`build/vu/`). |
 
 To cut a release, [make_github_release.sh](src/tools/scripts/make_github_release.sh)
-`[-f] [version]` runs `make clean`, `make` and `make release`, then packages both ELFs with
-an empty `baseq2/` tree and the committed `config.cfg` into `github_rel_<version>/` (one
-zip per config). `version` defaults to `VERSION` in `src/common/q_common.h`.
+`[-f] [-u] [version]` runs `make clean`, `make` and `make release`, then packages each
+config's `quake2.elf` with `LICENSE`, [RELEASE_NOTES.txt](misc/RELEASE_NOTES.txt) (its
+`@VERSION@` and `@COMMIT@` filled in, so it points to the exact source), an empty `baseq2/`
+tree and the committed `config.cfg` into `github_rel_<version>/` (one zip per config). `-u`
+adds `quake2_unstripped.elf`. `version` defaults to `VERSION` in `src/common/q_common.h`.
 
 The host tools and the assembled VU microprograms are config-independent (no EE compiler
 flag reaches either), so they are built once and shared, outside `build/<config>/`.
@@ -1143,10 +1145,15 @@ the `_clang-format` file at the root of the repo.
 
 ## Special thanks
 
-- [Wolf3s](https://github.com/Wolf3s).
+- [Wolf3s](https://github.com/Wolf3s) for the help playtesting.
 - The [PS2DEV][link_ps2_dev] project and its contributors.
 - The [PCSX2](https://github.com/pcsx2/pcsx2) project and its contributors.
 - [id Software](https://www.idsoftware.com/en) for making some of their most influential games open source.
+
+This project also includes or utilizes other Open Source libraries:
+- [miniz](https://github.com/richgel999/miniz)
+- [dlmalloc](https://gee.cs.oswego.edu/dl/html/malloc.html)
+- [ps2sdk](https://github.com/ps2dev/ps2sdk)
 
 ---
 

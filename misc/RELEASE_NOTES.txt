@@ -1,0 +1,92 @@
+Quake II for the PlayStation 2 - release @VERSION@
+==================================================
+
+An unofficial, fan-made port of id Software's Quake II to the Sony
+PlayStation 2, built entirely with the free PS2DEV SDK.
+
+  Project home:  https://github.com/glampert/quake2-ps2
+  Source code:   https://github.com/glampert/quake2-ps2/tree/@COMMIT@
+                 (the exact commit these ELFs were built from)
+
+This package contains only the program. It does not contain the Quake II
+game data (the pak files, music and videos), which is not free software:
+you need your own copy of the game. See the project page for how to set
+up the baseq2/ folder and run the game on a console or in PCSX2.
+
+
+License
+-------
+
+This program is free software, released under the GNU General Public
+License version 2. A copy of the license is in the LICENSE file that
+comes with this package, and online at:
+
+  https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html
+
+You may copy, modify and redistribute it under the terms of that license.
+If you redistribute these binaries, you must also offer their complete
+corresponding source code, which is available at the links above.
+
+This program comes with ABSOLUTELY NO WARRANTY; see sections 11 and 12 of
+the GPL for details.
+
+
+Quake II
+--------
+
+Quake II is Copyright (C) 1997-2001 id Software, Inc. id released the
+Quake II engine and game source code under the GNU GPL version 2:
+
+  https://github.com/id-Software/Quake-2
+
+This port is based on that release (version 3.19). Quake and Quake II
+are trademarks of id Software / ZeniMax Media. This project is not
+affiliated with or endorsed by id Software, ZeniMax Media, Bethesda,
+Microsoft or Sony Interactive Entertainment.
+
+
+The PS2 port
+------------
+
+Copyright (C) 2015-2026 Guilherme Lampert and contributors.
+
+The PlayStation 2 backend and all changes made to id's original source
+are released under the same GNU GPL version 2.
+
+  https://github.com/glampert/quake2-ps2
+
+
+Third-party components
+----------------------
+
+The program also includes code from:
+
+  - PS2SDK (https://github.com/ps2dev/ps2sdk): the EE libraries and IOP
+    modules, under the Academic Free License 2.0.
+
+  - miniz (https://github.com/richgel999/miniz), under the MIT license:
+
+      Copyright 2013-2014 RAD Game Tools and Valve Software
+      Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+
+      Permission is hereby granted, free of charge, to any person
+      obtaining a copy of this software and associated documentation
+      files (the "Software"), to deal in the Software without
+      restriction, including without limitation the rights to use, copy,
+      modify, merge, publish, distribute, sublicense, and/or sell copies
+      of the Software, and to permit persons to whom the Software is
+      furnished to do so, subject to the following conditions:
+
+      The above copyright notice and this permission notice shall be
+      included in all copies or substantial portions of the Software.
+
+      THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+      EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+      MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+      NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+      BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+      ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+      CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+      SOFTWARE.
+
+  - dlmalloc by Doug Lea, released to the public domain.
