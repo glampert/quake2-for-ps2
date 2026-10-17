@@ -68,6 +68,6 @@ if(MSVC)
         "${dirent_SOURCE_DIR}/include"
     )
 	
-	target_link_libraries(bspinfo dirent)
+	target_link_libraries(unpak dirent)
 endif()
 
