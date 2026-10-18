@@ -52,3 +52,12 @@ jobs:
       # tree. The other generators already have it from CMakeLists.txt.
       - name: Build
         run: cmake --build build/tools --config Release --parallel
+      # The Windows executables, for people who don't build the tools themselves. They are
+      # listed on the run's page (GitHub sign-in needed to download) and kept for 90 days.
+      - name: Upload the Windows executables
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: host-tools-windows-x64
+          path: build/tools/Release/*.exe
+          if-no-files-found: error

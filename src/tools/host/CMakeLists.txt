@@ -24,6 +24,11 @@ if(NOT IS_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Release, RelWithDebInfo, Debug or MinSizeRel." FORCE)
 endif()
 
+# MSVC links its C/C++ runtime statically (/MT), so each .exe runs on its own, without the
+# Visual C++ Redistributable installed. Set before any target is made, miniz included: a
+# runtime mismatch between objects is a link error.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # The binaries go to the build directory itself, unless the caller names another place (the
 # Makefile does: build/tools/, beside vclpp and symbolize, with this build tree under it).
 if(NOT CMAKE_RUNTIME_OUTPUT_DIRECTORY)
@@ -89,7 +94,9 @@ add_library(miniz STATIC ${MINIZ_DIR}/miniz.c ${MINIZ_DIR}/miniz_tdef.c ${MINIZ_
 set_target_properties(miniz PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
 target_include_directories(miniz SYSTEM PUBLIC ${MINIZ_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/miniz_cfg)
 if(MSVC)
-    target_compile_options(miniz PRIVATE /w)
+    # /W0, not /w: Visual Studio projects map /W0 onto their warning level setting, while /w
+    # is added after the default /W1 and draws a D9025 "overriding" warning.
+    target_compile_options(miniz PRIVATE /W0)
 else()
     target_compile_options(miniz PRIVATE -w)
 endif()

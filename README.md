@@ -235,9 +235,12 @@ cmake -S src/tools/host -B build/tools
 cmake --build build/tools --config Release
 ```
 
-That leaves the `.exe` files in `build/tools/Release/`. [CI](.github/workflows/tools.yml)
+That leaves the `.exe` files in `build/tools/Release/`. They link the C/C++ runtime statically,
+so they run without the Visual C++ Redistributable. [CI](.github/workflows/tools.yml)
 builds the tools on Linux (GCC), macOS (Apple clang) and Windows (MSVC) whenever they, or the
-headers they share with the game, change.
+headers they share with the game, change. Each run keeps the Windows executables as an artifact,
+`host-tools-windows-x64`, on its page under the repository's Actions tab, for 90 days. Downloading
+it needs a GitHub sign-in. The workflow can also be started by hand from there.
 
 ## How to run
 
