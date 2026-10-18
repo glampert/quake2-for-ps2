@@ -498,7 +498,7 @@ $(BUILD_DIR)/vu/%.o: $(VCL_PATH)/%.vcl $(VCL_INCS) $(VCLPP) $(VU_CHECK)
 # IOP modules embedded via bin2c.
 $(OUTPUT_DIR)/irx/%.o: $(IRX_PATH)/%.irx
 	@mkdir -p $(dir $@)
-	bin2c $< $(basename $@).c $(notdir $(basename $@))_irx
+	$(PS2SDK)/bin/bin2c $< $(basename $@).c $(notdir $(basename $@))_irx
 	$(EE_CC) $(EE_CFLAGS) $(EE_INCS) -c $(basename $@).c -o $@
 
 # Host tools.
