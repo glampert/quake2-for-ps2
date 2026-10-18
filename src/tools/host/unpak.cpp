@@ -53,7 +53,7 @@ static void make_path(const char * path_ended_with_sep_or_filename)
     struct stat dir_stat;
     char dir_path[512];
 
-    strncpy(dir_path, path_ended_with_sep_or_filename, sizeof(dir_path));
+    snprintf(dir_path, sizeof(dir_path), "%s", path_ended_with_sep_or_filename);
     char * pPath = dir_path;
 
     while (*pPath != '\0')
@@ -101,7 +101,7 @@ static bool write_file(const char * name, const void * data, int len_bytes)
         return false;
     }
 
-    fwrite(data, 1, len_bytes, out_file);
+    fwrite(data, 1, (size_t)len_bytes, out_file);
     fclose(out_file);
     return true; // Assume write went OK.
 }
@@ -109,7 +109,7 @@ static bool write_file(const char * name, const void * data, int len_bytes)
 static bool extract_file(FILE * pak_file, const char * dest_dir_name,
                          const char * name, int file_pos, int len_bytes)
 {
-    void * buffer = malloc(len_bytes);
+    void * buffer = malloc((size_t)len_bytes);
     if (buffer == NULL)
     {
         fprintf(stderr, "Out-of-memory in extract_file!\n");
@@ -117,7 +117,7 @@ static bool extract_file(FILE * pak_file, const char * dest_dir_name,
     }
 
     fseek(pak_file, file_pos, SEEK_SET);
-    fread(buffer, 1, len_bytes, pak_file);
+    fread(buffer, 1, (size_t)len_bytes, pak_file);
 
     if (ferror(pak_file))
     {
@@ -127,7 +127,12 @@ static bool extract_file(FILE * pak_file, const char * dest_dir_name,
     }
 
     char full_path_name[512];
-    snprintf(full_path_name, sizeof(full_path_name), "%s/%s", dest_dir_name, name);
+    if (snprintf(full_path_name, sizeof(full_path_name), "%s/%s", dest_dir_name, name) >= (int)sizeof(full_path_name))
+    {
+        fprintf(stderr, "Path too long for %s!\n", name);
+        free(buffer);
+        return false;
+    }
 
     bool result = write_file(full_path_name, buffer, len_bytes);
     free(buffer);
@@ -138,7 +143,7 @@ static bool extract_file(FILE * pak_file, const char * dest_dir_name,
 static bool unpak(FILE * pak_file, const pak_header_t * pak_header, const char * dest_dir_name)
 {
     pak_file_t * pak_file_entries;
-    int num_files_in_pak = pak_header->dirlen / sizeof(pak_file_t);
+    int num_files_in_pak = pak_header->dirlen / (int)sizeof(pak_file_t);
 
     if (num_files_in_pak > MAX_FILES_IN_PAK)
     {
@@ -146,7 +151,7 @@ static bool unpak(FILE * pak_file, const pak_header_t * pak_header, const char *
         // Allow it to continue.
     }
 
-    pak_file_entries = (pak_file_t *)malloc(num_files_in_pak * sizeof(pak_file_t));
+    pak_file_entries = (pak_file_t *)malloc((size_t)num_files_in_pak * sizeof(pak_file_t));
     if (pak_file_entries == NULL)
     {
         fprintf(stderr, "Out-of-memory in unpak!\n");
@@ -154,7 +159,7 @@ static bool unpak(FILE * pak_file, const pak_header_t * pak_header, const char *
     }
 
     fseek(pak_file, pak_header->dirofs, SEEK_SET);
-    fread(pak_file_entries, 1, pak_header->dirlen, pak_file);
+    fread(pak_file_entries, 1, (size_t)pak_header->dirlen, pak_file);
 
     if (ferror(pak_file))
     {
@@ -212,7 +217,7 @@ int main(int argc, char * argv[])
 
     char * ext_ptr;
     char dest_dir_name[512];
-    strncpy(dest_dir_name, pak_name, sizeof(dest_dir_name));
+    snprintf(dest_dir_name, sizeof(dest_dir_name), "%s", pak_name);
 
     // Remove the file extension, if any:
     if ((ext_ptr = strrchr(dest_dir_name, '.')) != NULL)

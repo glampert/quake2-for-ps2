@@ -11,6 +11,13 @@ paths:
 - `-std=gnu++20 -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-strict-aliasing`, with
   the `-Werror` set in the Makefile's `EE_CXX_WARNFLAGS`. ps2sdk and miniz headers are
   `-isystem`, so only our code is held to it. id's C is exempt. Don't apply any of this to it.
+- The host tools (`src/tools/host`) are held to the same set, minus `-Wdouble-promotion` and
+  plus `-Wpedantic`, by their CMakeLists.txt, and MSVC to `/W4`, all as errors. `make tools`
+  only checks Apple clang. GCC and MSVC are checked in CI (`.github/workflows/tools.yml`).
+  For GCC-only warnings before pushing, the EE compiler in its LP64 ABI stands in for a host
+  GCC: `mips64r5900el-ps2-elf-g++ -mabi=64 -std=gnu++20 -O3 <flags> -c -o /dev/null x.cpp`.
+  Without `-mabi=64` it is a 32-bit target, where `uint32_t` is `long` and `size_t` is 32 bits,
+  and its format and overflow findings don't apply to a host.
 - Reach the engine through `ps2/common.h`, not by including engine headers directly.
 - Seam functions keep their Quake names, because they are `extern "C"` symbols the C engine
   links against: `Sys_*`, `NET_*`, `VID_*`, `IN_*`, `SNDDMA_*`, `CDAudio_*`, `Sys_Save*`, the
@@ -62,7 +69,9 @@ Only *implicit* conversions warn. An explicit `static_cast` is the fix almost ev
   `if (!p) { Sys_Error(...); }` add `return X; // unreachable; Sys_Error halts (it is not marked noreturn)`.
   If a helper has any path returning null (e.g. a "measure" mode), every dereference of its
   result warns. Remove that path, e.g. by splitting a sizer type from the allocator. This can
-  surface when an int index becomes a pointer.
+  surface when an int index becomes a pointer. In the host tools, GCC at `-O3` flags writes
+  into a `std::vector` sized by `uint32_t` arithmetic that can wrap to 0, which leaves
+  `data()` null (musenc's `BuildWav`, 2026-10-18). Do the size arithmetic in `size_t`.
 - `-Wdeprecated-copy`: a user-provided `operator=` on an aggregate errors at every copy site.
   Wrap the *class definition* in `#pragma GCC diagnostic push/ignored "-Wdeprecated-copy"/pop`.
   GCC checks the state at the class, not at the use. Don't declare a copy ctor instead: any

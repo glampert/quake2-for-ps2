@@ -78,8 +78,8 @@ static bool WriteWholeFile(const char * path, const std::vector<uint8_t> & data)
     return (std::fclose(file) == 0) && (put == data.size());
 }
 
-static uint32_t Le16(const uint8_t * p) { return p[0] | (p[1] << 8); }
-static uint32_t Le32(const uint8_t * p) { return p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24); }
+static uint32_t Le16(const uint8_t * p) { return static_cast<uint32_t>(p[0] | (p[1] << 8)); }
+static uint32_t Le32(const uint8_t * p) { return static_cast<uint32_t>(p[0] | (p[1] << 8) | (p[2] << 16)) | (static_cast<uint32_t>(p[3]) << 24); }
 
 static void PutLe16(std::vector<uint8_t> & out, size_t at, uint32_t v)
 {
@@ -176,7 +176,7 @@ static std::vector<uint8_t> BuildWav(const PcmAudio & audio)
     const uint32_t frames      = static_cast<uint32_t>(audio.FrameCount());
     const uint32_t dataBytes   = frames * numChannels * 2;
 
-    std::vector<uint8_t> out(44 + dataBytes);
+    std::vector<uint8_t> out(44 + static_cast<size_t>(dataBytes)); // size_t: can't wrap to empty.
     std::memcpy(&out[0], "RIFF", 4);
     PutLe32(out, 4, 36 + dataBytes);
     std::memcpy(&out[8], "WAVEfmt ", 8);
@@ -233,7 +233,7 @@ static std::vector<int16_t> Decimate2(const std::vector<int16_t> & in, const int
     // Cutoff (-6 dB) half a transition band below the output Nyquist (inRate / 4).
     const double cutoff = (inRate / 4.0 - 525.0 * inRate / 44100.0) / inRate;
 
-    std::vector<double> taps(kTaps);
+    double taps[kTaps];
     double sum = 0.0;
     for (int i = 0; i < kTaps; ++i)
     {
@@ -261,10 +261,10 @@ static std::vector<int16_t> Decimate2(const std::vector<int16_t> & in, const int
             const int k = centre + i - kHalf;
             if (k >= 0 && k < inCount)
             {
-                acc += taps[i] * in[k];
+                acc += taps[i] * in[static_cast<size_t>(k)];
             }
         }
-        out[m] = static_cast<int16_t>(adpcm::ClampS16(static_cast<int>(std::lround(acc))));
+        out[static_cast<size_t>(m)] = static_cast<int16_t>(adpcm::ClampS16(static_cast<int>(std::lround(acc))));
     }
     return out;
 }
@@ -295,7 +295,7 @@ static void EncodeChannel(const std::vector<int16_t> & in, const int paddedBlock
         for (int i = 0; i < adpcm::kBlockSamples; ++i)
         {
             const int index = b * adpcm::kBlockSamples + i;
-            x[i] = (index < frames) ? in[index] : 0;
+            x[i] = (index < frames) ? in[static_cast<size_t>(index)] : 0;
         }
 
         double         bestError = HUGE_VAL;
@@ -409,7 +409,7 @@ static int Encode(const char * inPath, const char * outPath, const int targetRat
     const int paddedBlocks   = numChunks * blocksPerChunk;
 
     std::vector<EncodedChannel> encoded(static_cast<size_t>(numChannels));
-    for (int c = 0; c < numChannels; ++c)
+    for (size_t c = 0; c < encoded.size(); ++c)
     {
         EncodeChannel(audio.channels[c], paddedBlocks, encoded[c]);
     }
@@ -429,9 +429,9 @@ static int Encode(const char * inPath, const char * outPath, const int targetRat
 
     for (int chunk = 0; chunk < numChunks; ++chunk)
     {
-        for (int c = 0; c < numChannels; ++c)
+        for (const EncodedChannel & channel : encoded)
         {
-            const uint8_t * src = &encoded[c].blocks[static_cast<size_t>(chunk) * music::kChunkBytes];
+            const uint8_t * src = &channel.blocks[static_cast<size_t>(chunk) * music::kChunkBytes];
             out.insert(out.end(), src, src + music::kChunkBytes);
         }
     }
@@ -452,7 +452,7 @@ static int Encode(const char * inPath, const char * outPath, const int targetRat
     const double seconds = static_cast<double>(frames) / audio.sampleRate;
     std::printf("%s: %d Hz %s -> %d Hz, %.2f s, %zu bytes (%.0f B/s), SNR %.1f dB",
                 outPath, inRate, (numChannels == 2) ? "stereo" : "mono", audio.sampleRate, seconds,
-                out.size(), out.size() / seconds, SnrDb(signal, noise));
+                out.size(), static_cast<double>(out.size()) / seconds, SnrDb(signal, noise));
     if (numChannels == 2)
     {
         std::printf(" (L %.1f, R %.1f)", SnrDb(encoded[0].signal, encoded[0].noise), SnrDb(encoded[1].signal, encoded[1].noise));
@@ -501,14 +501,16 @@ static int Decode(const char * inPath, const char * outPath)
 
     for (int c = 0; c < numChannels; ++c)
     {
+        std::vector<int16_t> & channel = audio.channels[static_cast<size_t>(c)];
         adpcm::History history;
         for (int k = 0; k < blocksPerChannel; ++k)
         {
-            const size_t offset = music::kHeaderBytes + static_cast<size_t>(k / blocksPerChunk) * groupBytes +
-                                  static_cast<size_t>(c) * chunkBytes + static_cast<size_t>(k % blocksPerChunk) * adpcm::kBlockBytes;
-            adpcm::DecodeBlock(&file[offset], &audio.channels[c][static_cast<size_t>(k) * adpcm::kBlockSamples], 1, history);
+            const size_t offset = music::kHeaderBytes + static_cast<size_t>(k / blocksPerChunk) * static_cast<size_t>(groupBytes) +
+                                  static_cast<size_t>(c) * static_cast<size_t>(chunkBytes) +
+                                  static_cast<size_t>(k % blocksPerChunk) * adpcm::kBlockBytes;
+            adpcm::DecodeBlock(&file[offset], &channel[static_cast<size_t>(k) * adpcm::kBlockSamples], 1, history);
         }
-        audio.channels[c].resize(static_cast<size_t>(frames));
+        channel.resize(static_cast<size_t>(frames));
     }
 
     if (!WriteWholeFile(outPath, BuildWav(audio)))

@@ -311,11 +311,12 @@ static long compute_scratch_size(const bsp_header_t * hdr)
    .bsp. Returns -1 if the map has something the real loader would reject. */
 static long compute_brush_hunk_size(const bsp_header_t * hdr, const unsigned char * data)
 {
-    const d_face_t    * faces      = (const d_face_t *)   (data + hdr->lumps[6].fileofs);
-    const d_texinfo_t * texinfos   = (const d_texinfo_t *)(data + hdr->lumps[5].fileofs);
-    const int         * surf_edges = (const int *)        (data + hdr->lumps[12].fileofs);
-    const d_edge_t    * edges      = (const d_edge_t *)   (data + hdr->lumps[11].fileofs);
-    const d_vertex_t  * vertexes   = (const d_vertex_t *) (data + hdr->lumps[2].fileofs);
+    /* Through void*: the lumps are 4-byte aligned in the file, and the buffer is malloc'd. */
+    const d_face_t    * faces      = (const d_face_t *)   (const void *)(data + hdr->lumps[6].fileofs);
+    const d_texinfo_t * texinfos   = (const d_texinfo_t *)(const void *)(data + hdr->lumps[5].fileofs);
+    const int         * surf_edges = (const int *)        (const void *)(data + hdr->lumps[12].fileofs);
+    const d_edge_t    * edges      = (const d_edge_t *)   (const void *)(data + hdr->lumps[11].fileofs);
+    const d_vertex_t  * vertexes   = (const d_vertex_t *) (const void *)(data + hdr->lumps[2].fileofs);
 
     /* vertexes/edges/surfedges are still read - the warp subdivision walks them -
        but they reserve no hunk of their own; see the SZ_ block above. */
@@ -749,13 +750,13 @@ static void print_hunk_report(void)
     printf("and the second term currently wins. Do not shrink it to what is printed here.\n");
     printf("Round both up for headroom - custom maps and the mission packs are not in this set:\n");
     printf("  hunk    +5%%  = %8ld bytes (%.2f MB)   +10%% = %8ld bytes (%.2f MB)\n",
-           (long)(worst * 1.05), (double)worst * 1.05 / (1024.0 * 1024.0),
-           (long)(worst * 1.10), (double)worst * 1.10 / (1024.0 * 1024.0));
+           (long)((double)worst * 1.05), (double)worst * 1.05 / (1024.0 * 1024.0),
+           (long)((double)worst * 1.10), (double)worst * 1.10 / (1024.0 * 1024.0));
     printf("  scratch +5%%  = %8ld bytes (%.2f MB)   +10%% = %8ld bytes (%.2f MB)\n",
-           (long)(worst_scratch * 1.05), (double)worst_scratch * 1.05 / (1024.0 * 1024.0),
-           (long)(worst_scratch * 1.10), (double)worst_scratch * 1.10 / (1024.0 * 1024.0));
+           (long)((double)worst_scratch * 1.05), (double)worst_scratch * 1.05 / (1024.0 * 1024.0),
+           (long)((double)worst_scratch * 1.10), (double)worst_scratch * 1.10 / (1024.0 * 1024.0));
     printf("  combined at +10%% = %ld bytes (%.2f MB)\n",
-           (long)((worst + worst_scratch) * 1.10),
+           (long)((double)(worst + worst_scratch) * 1.10),
            (double)(worst + worst_scratch) * 1.10 / (1024.0 * 1024.0));
     printf("\n");
     printf("For reference, id's own ref_gl and ref_soft called Hunk_Begin(0x1000000) - 16 MB -\n");

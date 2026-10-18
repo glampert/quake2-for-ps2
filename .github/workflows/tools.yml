@@ -1,0 +1,54 @@
+# Builds the host command line tools (src/tools/host) optimized and with warnings as errors,
+# with each compiler they support: GCC on Linux, Apple clang on macOS, MSVC on Windows.
+#
+# The game itself needs the ps2dev toolchain and is not built here. The workflow runs when
+# the tools or what they compile change: their sources and CMakeLists.txt, the headers they
+# share with the game, and the miniz submodule pakzip links.
+
+name: Host tools
+
+on:
+  push:
+    paths:
+      - 'src/tools/host/**'
+      - 'src/ps2/audio/spu_adpcm.h'
+      - 'src/ps2/fs/pkz_format.h'
+      - 'src/tools/miniz'
+      - '.github/workflows/tools.yml'
+  pull_request:
+    paths:
+      - 'src/tools/host/**'
+      - 'src/ps2/audio/spu_adpcm.h'
+      - 'src/ps2/fs/pkz_format.h'
+      - 'src/tools/miniz'
+      - '.github/workflows/tools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: GCC, Ubuntu (latest)
+            os: ubuntu-latest
+          - name: Apple clang, macOS (latest)
+            os: macos-latest
+          - name: MSVC, Windows (latest)
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      # Only miniz. The other submodules (vclpp, vu-checker) are for the game build.
+      - name: Fetch the miniz submodule
+        run: git submodule update --init --depth 1 src/tools/miniz
+      - name: Configure
+        run: cmake -S src/tools/host -B build/tools
+      # --config picks Release under Visual Studio, which builds every config from one
+      # tree. The other generators already have it from CMakeLists.txt.
+      - name: Build
+        run: cmake --build build/tools --config Release --parallel

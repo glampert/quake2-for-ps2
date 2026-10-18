@@ -73,6 +73,9 @@ at a small number of well defined seams — `refexport_t`, `SNDDMA_*`, `IN_*`, `
 
    Note the toolchain prefix is `mips64r5900el-ps2-elf-*`, not the older `ee-gcc`.
 
+   `make` also builds the [host tools](#host-tools) with the machine's own C++20 compiler,
+   through **CMake 3.24 or newer**, so `cmake` has to be on `PATH` as well.
+
    A `~/.zshenv` (or equivalent) along these lines is what the Makefile and the VSCode
    tasks expect:
 
@@ -220,6 +223,21 @@ and is simply copied into place):
   background, HUD backtile, id logo and global palette under [src/ps2/builtin/](src/ps2/builtin/),
   which are compiled into the ELF so the executable can show its boot splash and print errors
   before any game data is found.
+
+The C++ tools are a CMake project, [CMakeLists.txt](src/tools/host/CMakeLists.txt). `make`
+configures it once into `build/tools/cmake/`, then runs its build every time, which does
+nothing while the tools are up to date. They are built optimized (`Release`) and held to the
+game's strict warning set as errors (`/W4` under MSVC). They build on Windows too, with MSVC.
+From the repository root:
+
+```sh
+cmake -S src/tools/host -B build/tools
+cmake --build build/tools --config Release
+```
+
+That leaves the `.exe` files in `build/tools/Release/`. [CI](.github/workflows/tools.yml)
+builds the tools on Linux (GCC), macOS (Apple clang) and Windows (MSVC) whenever they, or the
+headers they share with the game, change.
 
 ## How to run
 
