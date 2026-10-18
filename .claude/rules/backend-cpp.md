@@ -18,6 +18,10 @@ paths:
   GCC: `mips64r5900el-ps2-elf-g++ -mabi=64 -std=gnu++20 -O3 <flags> -c -o /dev/null x.cpp`.
   Without `-mabi=64` it is a 32-bit target, where `uint32_t` is `long` and `size_t` is 32 bits,
   and its format and overflow findings don't apply to a host.
+- Ubuntu's GCC turns on `_FORTIFY_SOURCE` by default, and glibc then declares `fread`, `fgets`
+  and the `scanf` family `warn_unused_result`. Neither macOS's libc nor newlib does, so an
+  unchecked `fread` passes `make tools` and fails Linux CI (unpak, 2026-10-18). To check locally,
+  redeclare them with `__attribute__((warn_unused_result))` in a header passed by `-include`.
 - Reach the engine through `ps2/common.h`, not by including engine headers directly.
 - Seam functions keep their Quake names, because they are `extern "C"` symbols the C engine
   links against: `Sys_*`, `NET_*`, `VID_*`, `IN_*`, `SNDDMA_*`, `CDAudio_*`, `Sys_Save*`, the

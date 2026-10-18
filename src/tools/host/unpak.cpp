@@ -117,9 +117,7 @@ static bool extract_file(FILE * pak_file, const char * dest_dir_name,
     }
 
     fseek(pak_file, file_pos, SEEK_SET);
-    fread(buffer, 1, (size_t)len_bytes, pak_file);
-
-    if (ferror(pak_file))
+    if (fread(buffer, 1, (size_t)len_bytes, pak_file) != (size_t)len_bytes)
     {
         fprintf(stderr, "Error reading file data block for %s!\n", name);
         free(buffer);
@@ -158,10 +156,9 @@ static bool unpak(FILE * pak_file, const pak_header_t * pak_header, const char *
         return false;
     }
 
+    // Whole entries only, as many as were allocated: dirlen needn't be a multiple of them.
     fseek(pak_file, pak_header->dirofs, SEEK_SET);
-    fread(pak_file_entries, 1, (size_t)pak_header->dirlen, pak_file);
-
-    if (ferror(pak_file))
+    if (fread(pak_file_entries, sizeof(pak_file_t), (size_t)num_files_in_pak, pak_file) != (size_t)num_files_in_pak)
     {
         fprintf(stderr, "Error reading pak_file_entries block!\n");
         free(pak_file_entries);
@@ -206,9 +203,8 @@ int main(int argc, char * argv[])
     }
 
     pak_header_t pak_header;
-    fread(&pak_header, 1, sizeof(pak_header), pak_file);
-
-    if (pak_header.ident != PAK_HEADER_IDENT)
+    if (fread(&pak_header, 1, sizeof(pak_header), pak_file) != sizeof(pak_header) ||
+        pak_header.ident != PAK_HEADER_IDENT)
     {
         fprintf(stderr, "Bad file id for pak %s!\n", pak_name);
         fclose(pak_file);
