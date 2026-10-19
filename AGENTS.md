@@ -21,6 +21,12 @@ every backend cvar. Add new ones there, with their debug/release defaults and fl
 - `$PS2DEV` = `~/ps2dev`, `$PS2SDK` = `~/ps2dev/ps2sdk` (EE headers in `ee/include`). The
   SDK's C sources, for checking what a library really does, are under
   `~/ps2dev/src/ps2dev/build/ps2sdk/ee/<lib>/src/`. gsKit is at `~/ps2dev/gsKit`.
+- Updating it: `cd ~/ps2dev/src/ps2dev && PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH" ./build-all.sh`
+  (`./build-all.sh 3 4 5` reruns only those steps: 1 toolchain, 2 ps2sdk, 3 ports,
+  4 ps2-packer, 5 ps2client). ps2sdk-ports needs Homebrew's `pkgconf`, and its install runs
+  `sed -i` on symlinked `.pc` files, which BSD sed refuses. Then `make clean`: make tracks
+  neither the SDK's libraries nor its headers. Last rebuilt 2026-10-19: ps2sdk `329e2bb`
+  (CI's pin), newlib `8881dc4`.
 - Submodules: `src/tools/vclpp` (VCL preprocessor, with its own nested `external/parse-utils`),
   `src/tools/vu-checker` (`check_vu_code.py`), `src/tools/miniz`. The build uses the pinned
   vclpp it builds into `build/tools/vclpp`, never one on `PATH`.

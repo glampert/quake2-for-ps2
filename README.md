@@ -73,6 +73,11 @@ at a small number of well defined seams — `refexport_t`, `SNDDMA_*`, `IN_*`, `
 
    Note the toolchain prefix is `mips64r5900el-ps2-elf-*`, not the older `ee-gcc`.
 
+   On macOS, ps2dev's `build-all.sh` also needs Homebrew's `pkgconf`, and GNU sed ahead of
+   the system one, or its ps2sdk-ports step fails:
+   `PATH="$(brew --prefix gnu-sed)/libexec/gnubin:$PATH" ./build-all.sh`. After updating the
+   SDK, run `make clean`: make tracks neither the SDK's headers nor its libraries.
+
    `make` also builds the [host tools](#host-tools) with the machine's own C++20 compiler,
    through **CMake 3.24 or newer**, so `cmake` has to be on `PATH` as well.
 

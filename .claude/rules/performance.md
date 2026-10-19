@@ -10,7 +10,9 @@ paths:
 
 - Goal: a smooth 60 fps through the whole `ps2_perftest` capture. It currently has **0
   dropped frames**. Reference `build/baselines/vwep.flog`: EE work mean 5.4 ms, p99 9.3 ms,
-  max 11.6 ms (debug).
+  max 11.6 ms (debug). The SDK update of 2026-10-19 changed no stage by more than 0.1%
+  (SndMix -0.9%, which wanders anyway): `sdk-986ff32.flog` against `sdk-329e2bb.flog`, the
+  current reference, same code.
 - What it took: soft-float doubles in the engine C (`-fsingle-precision-constant` +
   `math_c.h`, 59 → 1 drops); cheaper effects (`Com_FxRand`, an incremental rail spiral,
   inline `V_AddParticle`); preloading mid-level assets (player weapon fire sounds, all view

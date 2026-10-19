@@ -36,8 +36,9 @@ paths:
 - **`v2.0.0`, the only release tag since 2021, can't build this tree.** openvcl and masp
   joined ps2toolchain-dvp on 2026-05-18, two days after it. Every `latest` since has them.
 - The pin, as of 2026-10-19: `latest` as built on 2026-10-13, which is ps2sdk `329e2bb`,
-  GCC 15.2.0, binutils 2.45.1, newlib 4.6.0, openvcl 0.4.0, on Alpine 3.24. The local
-  install (built 2026-07-03) has the same toolchain, with ps2sdk `986ff32` (2026-07-01).
+  GCC 15.2.0, binutils 2.45.1, newlib 4.6.0 (`8881dc4`, with `HAVE_BLKSIZE`), openvcl 0.4.0,
+  on Alpine 3.24. The local install was rebuilt the same day from the same sources (see the
+  update recipe in AGENTS.md).
 - **Moving the pin:** read the new digest, check that it builds (below), then update the
   digest and the comment above it in `ps2.yml`. The registry answers without Docker or a
   GitHub login:

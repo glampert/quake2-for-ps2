@@ -25,6 +25,26 @@ paths:
   "isn't enabled", compile the macro standalone on the host and inspect the bits.
 - `packet_init`/`packet2_create` each `calloc` a header and `memalign(64)` the buffer. Read the
   SDK source when internal behaviour matters.
+- **stdio sizes its buffers from `st_blksize`** since the 2026-10-19 install: newlib's
+  `ee-v4.6.0` is built with `HAVE_BLKSIZE` (2026-10-03), and ps2sdk reports `st_blksize`
+  (`8745ab1`). A regular file reports 16 KB through ROM FILEIO (`host:`), and fileXio's read
+  buffer through fileXio (`mass:`, `pfs:`): 64 KB on this port's USB and HDD boots
+  (`SetFileXioBuffer`). Other files report 0. Before, a stream newlib sized itself got 1 KB
+  (`BUFSIZ`), and every stream got `__SNPT`, so newlib optimized no `fseek`: each one dropped
+  the buffer and went to the device. Now a stream newlib sizes itself, or one whose `setvbuf`
+  size equals `st_blksize`, keeps `__SOPT`. A seek inside its buffer is free. Any other seek,
+  the first after an open included, reads the aligned `st_blksize` block below the target: up
+  to 64 KB more than asked for. A `setvbuf` of any other size keeps the old behaviour, so
+  `FS_SetStreamBuffer`'s seeks stay in its buffer only on USB/HDD, for files of 64 KB or more.
+  Streams opened without `setvbuf` (config.cfg, condump, demos, screenshots, host saves) now
+  hold 16-64 KB instead of 1 KB.
+  Same code on the old and new SDK in PCSX2 (2026-10-19): the MapCycle's memory, the perf
+  capture and eight USB loads' times didn't move. The console cost of the first-seek over-read
+  is unmeasured.
+- **libcglue rewrites every path `open()` gets** (`__path_absolute`, cwd.c). Device paths come
+  out as they went in (`host:x` gains its `/`), but a path without a device takes the cwd and a
+  `\` separator since `cdc7d28` (it read an uninitialized variable before). Keep every path
+  device-prefixed, as the game's bases (`host:`, `host:.`, `massN:`, `pfs0:`) are.
 - **`close()` on a fileXio path (`mass:`, `pfs:`) returns a positive number on success.**
   `iomanX_close` returns `f - file_table`, the descriptor's slot (`HANDLE_RESULT_RETURN_FD`
   in iomanx/src/iomanX.c), and libcglue's `__transform_errno` passes any non-negative value

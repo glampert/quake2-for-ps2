@@ -12,6 +12,9 @@
   `~/Library/Application Support/PCSX2/logs/emulog.txt`. Engine lines carry a `[Q2]` prefix.
 - **Edit PCSX2.ini only while PCSX2 is closed.** It rewrites the file on exit.
 - Every launch overwrites `emulog.txt`. Copy it out before the next launch if you need it.
+- **`PCSX2 -batch` exits 30-90 s after the game quits.** The quit writes config.cfg, then
+  restarts the EE, which emulog shows as `# Restart.` (only then, never at boot). A script can
+  close PCSX2 at that line.
 - **A `baseq2/pak0.pkz` (from `make pkz`) is loaded instead of `pak0.pak`.** The log says
   `Added packfile host:/baseq2/pak0.pkz (3307 files, compressed)`. To test the `.pak` path,
   move the pkz out of `baseq2/`. Don't leave a stale pkz behind after changing the pak.
@@ -156,6 +159,16 @@ The debug page was tested this way (2026-10-12), fired from the `CDAudio_Play` h
   96 included files by SHA-256, with no missing/extra files or directories. Sixteen fixture
   cases cover selection, sizing, errors and safe replacement. Both ELFs now sit next to
   the shared data, requiring no folder fallback. Close PCSX2 before replacing an image.
+- **Scripted runs from the emulated stick, no launcher** (2026-10-19): launch a host ELF
+  from a folder with no `baseq2/` (the `host:` probe misses; HDD off), with `[USB2] Type = Msd`
+  on the image and **`Slot1_Enable = false`**. A USB boot reads config.cfg from the card first,
+  so with a card in, the stick's config and any test cvar in it are ignored (and autosaves go to
+  the card). Put the cvars in the image's `baseq2/config.cfg`:
+  `hdiutil attach -imagekey diskimage-class=CRawDiskImage -nobrowse -mountpoint <dir> <img>`,
+  edit, `hdiutil detach <dir>`. Give each run an APFS clone of a pristine image (`cp -c`), so
+  every run starts from the same bytes. Debug with the I/O log (`ps2_logfile "0"`), the first
+  8 MapCycle loads from the pkz took 95.5 s in all (base1 22.4 s, 10.68 MB read); the boot
+  found the data at 658 ms.
 - **HDD boot:** the current source embeds DEV9/ATAD/APA/PFS and probes HDD between `host:`
   and USB. ELFs packaged before HDD support need rebuilding.
   Enable `[DEV9/Hdd] HddEnable = true` and set `HddFile` to a PCSX2 HDD image. Create and

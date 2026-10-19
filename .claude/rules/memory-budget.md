@@ -56,6 +56,11 @@ paths:
   - The arena tracked the live increase, within ~0.07 MB apart from a transient bump. The
     end-of-pass top chunk was 55 KB against 1.11 MB, but arena-free plus headroom differed
     only by the 0.14 MB: where the free space lands is chaotic.
+- **The 2026-10-19 SDK update** (ps2sdk `329e2bb`, newlib built with `HAVE_BLKSIZE`), same
+  code, debug, pkz: the worst moment is 30.29 MB on both SDKs (city3's load; strike's load
+  peak 30.24 MB), and every map's live total matches within the 0.01 MB the line shows. The
+  end-of-pass layout differed (top chunk 819 KB against 161 KB, arena 24.54 against
+  24.30 MB): a ~5 KB larger ELF moves where dlmalloc lands things.
 - **Fixed segregated heaps for textures/models were rejected.** A partition must cover
   max(tex+mdl) + max(everything else), and those peak at different moments, so it costs about
   1.2 MB more than fragmentation does. Fragmentation (arena minus live peak) measured
@@ -69,4 +74,5 @@ paths:
 Reference summaries live in `build/baselines/` (local, untracked): `mapcycle-fbl0` (before
 free-before-load), `mapcycle-fbl1`, `mapcycle-mip0`/`mip1`, `mapcycle-vwep`,
 `mapcycle-cdmusic`, `mapcycle-cdmusic2` (ADPCM, 512 KB chain halves), `mapcycle-cdwav` (WAV only),
-`mapcycle-chain768` (ADPCM, 768 KB halves, current code).
+`mapcycle-chain768` (ADPCM, 768 KB halves), `mapcycle-sdk-986ff32` and `mapcycle-sdk-329e2bb`
+(pkz, current code on the old and new SDK).
