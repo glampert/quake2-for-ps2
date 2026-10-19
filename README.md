@@ -149,6 +149,12 @@ make run        # build, then launch it in PCSX2
 Header dependencies are tracked automatically (`-MMD`), so editing a header rebuilds only
 the affected objects.
 
+[CI](.github/workflows/ps2.yml) runs `make` and `make release` on Linux for every push and pull
+request that changes more than the documentation, inside the ps2dev project's
+[`ps2sdk` container image](https://github.com/ps2dev/ps2sdk/pkgs/container/ps2sdk), pinned to
+one build of it. It checks that both configs compile and link, and keeps no ELF: releases are
+packaged from local builds, as described below.
+
 #### Debug and release
 
 | | `make` (debug) | `make release` |

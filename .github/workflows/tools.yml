@@ -1,9 +1,9 @@
 # Builds the host command line tools (src/tools/host) optimized and with warnings as errors,
 # with each compiler they support: GCC on Linux, Apple clang on macOS, MSVC on Windows.
 #
-# The game itself needs the ps2dev toolchain and is not built here. The workflow runs when
-# the tools or what they compile change: their sources and CMakeLists.txt, the headers they
-# share with the game, and the miniz submodule pakzip links.
+# The game is built by ps2.yml, inside the ps2dev toolchain's container image. This workflow
+# runs when the tools or what they compile change: their sources and CMakeLists.txt, the
+# headers they share with the game, and the miniz submodule pakzip links.
 
 name: Host tools
 

@@ -13,7 +13,8 @@ paths:
   `-isystem`, so only our code is held to it. id's C is exempt. Don't apply any of this to it.
 - The host tools (`src/tools/host`) are held to the same set, minus `-Wdouble-promotion` and
   plus `-Wpedantic`, by their CMakeLists.txt, and MSVC to `/W4`, all as errors. `make tools`
-  only checks Apple clang. GCC and MSVC are checked in CI (`.github/workflows/tools.yml`).
+  only checks Apple clang. CI checks GCC 13 and MSVC (`.github/workflows/tools.yml`), and
+  GCC 15 on musl too, since `ps2.yml` runs `make` (see [ci.md](ci.md)).
   For GCC-only warnings before pushing, the EE compiler in its LP64 ABI stands in for a host
   GCC: `mips64r5900el-ps2-elf-g++ -mabi=64 -std=gnu++20 -O3 <flags> -c -o /dev/null x.cpp`.
   Without `-mabi=64` it is a 32-bit target, where `uint32_t` is `long` and `size_t` is 32 bits,

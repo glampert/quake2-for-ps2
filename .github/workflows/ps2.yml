@@ -1,0 +1,54 @@
+# Builds the game on Linux the way `make` and `make release` build it on a development
+# machine: both ELFs, and with them vclpp, the VU microprograms (checks included) and the host
+# tools. It runs inside ghcr.io/ps2dev/ps2sdk, the ps2dev project's Alpine image of the EE, IOP
+# and dvp toolchains (openvcl included) and the PS2SDK. The image is pinned by digest, so a new
+# upstream toolchain or SDK can't change the result unannounced. .claude/rules/ci.md has how to
+# move the pin, and the traps.
+#
+# A compile check only, so no ELF is kept: releases are packaged from local builds, and the IOP
+# modules an ELF embeds come from the SDK that built it. The workflow runs for every change
+# except to the documentation or the editor settings.
+
+name: PS2 game
+
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+      - 'misc/**'
+      - '.claude/**'
+      - '.vscode/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'misc/**'
+      - '.claude/**'
+      - '.vscode/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Debug and release, ps2sdk image (Alpine)
+    # x64 on purpose: the runner can only run JavaScript actions (checkout) inside an Alpine
+    # container on an x64 machine.
+    runs-on: ubuntu-latest
+    # ps2sdk:latest as built on 2026-10-13: ps2sdk 329e2bb, GCC 15.2.0, binutils 2.45.1,
+    # newlib 4.6.0, openvcl 0.4.0, on Alpine 3.24.
+    container: ghcr.io/ps2dev/ps2sdk@sha256:075831168002ab67659125e369d24f34e8f43d1af530f63582932e7648d9275a
+    steps:
+      # The image has nothing for the host side of the build: make, the C/C++ compiler vclpp and
+      # the host tools are built with, CMake, and Python 3 for the build scripts. git goes in
+      # before checkout, which would otherwise download a tarball with no submodules in it.
+      - name: Install the host build tools
+        run: apk add --no-cache build-base cmake python3 git
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Build debug
+        run: make -j"$(nproc)"
+      # Reuses the VU microprograms and the host tools the debug build made.
+      - name: Build release
+        run: make release -j"$(nproc)"

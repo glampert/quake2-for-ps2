@@ -39,8 +39,11 @@ every backend cvar. Add new ones there, with their debug/release defaults and fl
   The symbols are in `quake2_unstripped.elf` next to each stripped ELF.
 - The host tools (`src/tools/host`) are a CMake project, which `make` configures into
   `build/tools/cmake/` and builds on every run. CMake tracks their dependencies, so the
-  Makefile doesn't. CI (`.github/workflows/tools.yml`) builds only these tools, with GCC,
-  Apple clang and MSVC.
+  Makefile doesn't.
+- CI: `.github/workflows/ps2.yml` runs `make` and `make release` on Linux, in the ps2dev
+  `ps2sdk` image pinned by digest, for every change but docs. It keeps no ELF, since releases
+  are packaged from local builds. `tools.yml` builds the host tools alone, with GCC, Apple
+  clang and MSVC. See [.claude/rules/ci.md](.claude/rules/ci.md).
 - `PS2_QUAKE_DEBUG`, `PS2_QUAKE_ASSERTS` and `PS2_QUAKE_PROFILE` are always defined to 0 or 1.
   Test them with `#if`, never `#ifdef` (`-Wundef` is on).
 - make does not track flag changes. After editing `CONFIG_DEFS` or other flags,
@@ -94,3 +97,4 @@ recipe), record it in the matching rule file below, so it travels with the repo.
 | [audio.md](.claude/rules/audio.md) | `src/ps2/audio`, musenc | CD music format and pipeline decisions, costs |
 | [save-games.md](.claude/rules/save-games.md) | `src/ps2/save`, g_save.c | save design, format, icon, config.cfg policy, how to test |
 | [vclpp-submodule.md](.claude/rules/vclpp-submodule.md) | `src/tools/vclpp` | vclpp/parse-utils conventions, verification recipes, CI, MASP mode, tyra |
+| [ci.md](.claude/rules/ci.md) | `.github` | the two workflows, the pinned ps2sdk image and moving it, checking a Linux build without Docker, runner traps |
