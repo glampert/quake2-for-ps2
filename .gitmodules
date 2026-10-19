@@ -4,6 +4,7 @@
 [submodule "src/tools/miniz"]
 	path = src/tools/miniz
 	url = https://github.com/richgel999/miniz.git
+	ignore = untracked
 [submodule "src/tools/vu-checker"]
 	path = src/tools/vu-checker
 	url = https://github.com/glampert/vu-checker.git
