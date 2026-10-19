@@ -12,11 +12,15 @@ paths:
   (`make_github_release.sh`), and the IOP modules an ELF embeds come from the SDK that built it.
 - **`tools.yml`** builds the host tools alone, with GCC, Apple clang and MSVC, when they or the
   headers they share with the game change. It keeps the Windows `.exe` files as an artifact.
-- The two jobs see different hosts. `tools.yml` gets Ubuntu 24.04's GCC 13.3 on glibc, with
-  `_FORTIFY_SOURCE` (see [backend-cpp.md](backend-cpp.md)). `ps2.yml` gets Alpine's GCC 15.2
-  on musl, and GNU make 4.4.1 where the Mac has 3.81. Linux file names are case-sensitive and
-  this Mac's APFS volume isn't, so an include or Makefile path in the wrong case builds
-  locally and fails CI.
+- The two jobs see different hosts. `tools.yml` gets whatever GCC `ubuntu-latest` ships, on
+  glibc with `_FORTIFY_SOURCE` (see [backend-cpp.md](backend-cpp.md)). The label moves from
+  Ubuntu 24.04 to 26.04 between 2026-10-19 and 11-19. `ps2.yml` gets the GCC and make of the
+  Alpine release under the pinned image, on musl, where the Mac has make 3.81. Linux file
+  names are case-sensitive and this Mac's APFS volume isn't, so an include or Makefile path in
+  the wrong case builds locally and fails CI.
+- The first `ps2.yml` run (2026-10-19, `0e1e997`) passed in 82 s: 14 s to pull the image,
+  38 s for the debug build, 14 s for the release one. Host tools and vclpp built warning-free
+  under the image's GCC 15.2.
 
 ## The ps2sdk image
 
